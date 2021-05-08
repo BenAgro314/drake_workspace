@@ -48,10 +48,14 @@ ARG user
 
 ENV PASS=$password
 #RUN printf "$password\n$password\n" | passwd
+# ENV LANG=en_US.UTF-8 
+# ENV LC_ALL=en_US.UTF-8.
+
+RUN apt-get -y install ipython
 
 # maybe add:
-# git clone https://github.com/RussTedrake/underactuated.git
-# export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8.
+# RUN git clone https://github.com/RussTedrake/underactuated.git
+# RUN pip3 install --requirement requirements.txt
 
 
 RUN groupadd -g 1004 agrobenj
@@ -60,6 +64,7 @@ RUN useradd -s /bin/bash -u $id -g $id -m $user && echo "$user:$password" | chpa
 USER agrobenj
 
 RUN echo "source /python_venvs/drake_env/bin/activate" >> ~/.bashrc
+#RUN echo "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8." >> ~./bashrc
 
 WORKDIR /home/$user/workspace
 
