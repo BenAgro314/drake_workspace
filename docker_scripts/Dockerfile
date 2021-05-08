@@ -49,6 +49,10 @@ ARG user
 ENV PASS=$password
 #RUN printf "$password\n$password\n" | passwd
 
+# maybe add:
+# git clone https://github.com/RussTedrake/underactuated.git
+# export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8.
+
 
 RUN groupadd -g 1004 agrobenj
 RUN useradd -s /bin/bash -u $id -g $id -m $user && echo "$user:$password" | chpasswd && adduser $user sudo
