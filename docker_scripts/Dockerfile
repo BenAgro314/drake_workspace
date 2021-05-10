@@ -11,6 +11,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 tigervnc-standalone-
 RUN apt-get update
 RUN apt-get -y install curl
 RUN apt-get -y install python3-venv
+RUN apt-get -y install ipython
+RUN apt-get -y firefox
 
 #-----------drake-----------------
 
@@ -25,7 +27,6 @@ RUN tar -xvzf drake.tar.gz -C /python_venvs/drake_env --strip-components=1
 RUN yes | /python_venvs/drake_env/share/drake/setup/install_prereqs
 WORKDIR /python_venvs
 RUN python3 -m venv drake_env --system-site-packages
-
 #---------------------------------
 
 # utilities 
@@ -48,23 +49,25 @@ ARG user
 
 ENV PASS=$password
 #RUN printf "$password\n$password\n" | passwd
-# ENV LANG=en_US.UTF-8 
-# ENV LC_ALL=en_US.UTF-8.
+#ENV LANG=en_US.UTF-8 
+#ENV LC_ALL=en_US.UTF-8.
 
-RUN apt-get -y install ipython
 
-# maybe add:
-# RUN git clone https://github.com/RussTedrake/underactuated.git
-# RUN pip3 install --requirement requirements.txt
 
 
 RUN groupadd -g 1004 agrobenj
 RUN useradd -s /bin/bash -u $id -g $id -m $user && echo "$user:$password" | chpasswd && adduser $user sudo
 
+RUN chown -R agrobenj /python_venvs 
+ENV PATH="/python_venvs/drake_env/bin:$PATH"
+
 USER agrobenj
 
+RUN pip install mjcf2urdf
+RUN git clone https://github.com/Khodeir/furniture.git ~/furniture
+
 RUN echo "source /python_venvs/drake_env/bin/activate" >> ~/.bashrc
-#RUN echo "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8." >> ~./bashrc
+#RUN echo "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8." >> ~/.bashrc
 
 WORKDIR /home/$user/workspace
 
