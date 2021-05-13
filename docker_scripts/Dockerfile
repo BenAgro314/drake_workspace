@@ -64,6 +64,9 @@ ENV PATH="/python_venvs/drake_env/bin:$PATH"
 USER agrobenj
 
 RUN pip install mjcf2urdf
+RUN pip install pandas
+RUN pip install altair
+RUN pip install plotly
 RUN git clone https://github.com/Khodeir/furniture.git ~/furniture
 
 RUN echo "source /python_venvs/drake_env/bin/activate" >> ~/.bashrc
