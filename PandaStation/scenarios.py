@@ -32,15 +32,19 @@ def AddPanda(plant, q0 = [0.0, 0.1, 0, -1.2, 0, 1.6, 0], X_WB =  RigidTransform(
 
     return panda_model_instance
 
-def AddPandaHand(plant, panda_model_instance, roll = 0):
+def AddPandaHand(plant, panda_model_instance, roll = 0, welded = False):
     """Adds a hand to the panda arm (panda_link8)
 
     plant: the multibody plant 
     panda_model_instance: the panda model instance to add the hand to
     roll: the rotation of the hand relative to panda_link8
+    welded: if we want the version with welded fingers (for control)
     """
 
-    gripper = parser.AddModelFromFile(pydrake.common.FindResourceOrThrow("drake/manipulation/models/panda_description/urdf/panda_hand.urdf"))
+    if welded:
+        gripper = parser.AddModelFromFile("./models/welded_panda_hand.urdf")
+    else:
+        gripper = parser.AddModelFromFile(pydrake.common.FindResourceOrThrow("drake/manipulation/models/panda_description/urdf/panda_hand.urdf"))
 
     X_8G = RigidTransform(RollPitchYaw(0, 0, roll), [0,0,0])
     plant.WeldFrames(plant.GetFrameByName("panda_link8", panda_model_instance), plant.GetFrameByName("panda_hand",gripper), X_8G)
