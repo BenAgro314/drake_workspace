@@ -53,7 +53,7 @@ class PandaHandPdController(pydrake.systems.framework.LeafSystem):
 
 
     def get_desired_state_input_port(self):
-        return get_input_port(self.desired_state_input_port)
+        return self.desired_state_input_port
         
     def get_force_limit_input_port(self):
         return self.force_limit_input_port
@@ -77,18 +77,20 @@ class PandaHandPdController(pydrake.systems.framework.LeafSystem):
         if (force_limit <= 0):
             raise Exception("Force limit must be greater than 0")
 
+        # TODO(ben): check the math below
+
         state = self.state_input_port.Eval(context)
 
-        f0_plus_f1 = -self.kp_constraint * (state[0] + state[1]) - self.kd_constraint * (state[2] + state[3])
+        f0_plus_f1 = -self.kp_constraint * (-state[0] + state[1]) - self.kd_constraint * (-state[2] + state[3]) # enforces symetrical state
 
-        neg_f0_plus_f1 = self.kp_command * (desired_state[0] + state[0] - state[1]) + self.kd_command * (desired_state[1] + state[2] - state[3])
+        neg_f0_plus_f1 = self.kp_command * (desired_state[0] - state[0] - state[1]) + self.kd_command * (desired_state[1] - state[2] - state[3])
 
         if (neg_f0_plus_f1 > force_limit):
             neg_f0_plus_f1 = force_limit
         if (neg_f0_plus_f1 < -force_limit):
             neg_f0_plut_f1 = -force_limit
 
-        return np.array([0.5*f0_plus_f1-0.5*neg_f0_plus_f1, 0.5*f0_plus_f1 + 0.5*neg_f0_plus_f1np])
+        return np.array([-0.5*f0_plus_f1+0.5*neg_f0_plus_f1, 0.5*f0_plus_f1 + 0.5*neg_f0_plus_f1])
 
 
     def CalcGeneralizedForceOutput(self, context, output_vector):
@@ -124,9 +126,13 @@ class PandaHandPositionController(pydrake.systems.framework.Diagram):
                     kp_constraint,
                     kd_constraint,
                     default_force_limit))
+
         self.state_interpolator = builder.AddSystem(
                 pydrake.systems.primitives.StateInterpolatorWithDiscreteDerivative(
                     1, time_step, suppress_initial_transient = True))
+
+        builder.Connect(self.state_interpolator.get_output_port(), 
+                self.pd_controller.get_desired_state_input_port())
 
         self.desired_position_input_port = builder.ExportInput(
                 self.state_interpolator.get_input_port(), "desired_position")

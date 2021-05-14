@@ -1,1 +1,1 @@
-from .PandaStation import MakePandaStation
+from .PandaStation import PandaStation
