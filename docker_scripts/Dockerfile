@@ -71,6 +71,7 @@ RUN pip install pylint
 RUN git clone https://github.com/Khodeir/furniture.git ~/furniture
 
 RUN echo "source /python_venvs/drake_env/bin/activate" >> ~/.bashrc
+RUN echo "export  $USER=$user"
 #RUN echo "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8." >> ~/.bashrc
 
 WORKDIR /home/$user/workspace

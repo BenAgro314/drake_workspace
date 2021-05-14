@@ -1,5 +1,5 @@
 import pydrake.all
-from scenarios import AddPanda, AddPandaHand
+from .scenarios import AddPanda, AddPandaHand
 
 def MakePandaStation(time_step = 0.002):
     """Constructs a PandaStation"""
@@ -9,7 +9,7 @@ def MakePandaStation(time_step = 0.002):
     plant, scene_graph = pydrake.multibody.plant.AddMultibodyPlantSceneGraph(
         builder, time_step = time_step)
     panda = AddPanda(plant)
-    hand = AddPandaHand(plant)
+    hand = AddPandaHand(plant, panda)
     plant.Finalize()
 
     num_panda_positions = plant.num_positions(panda)
@@ -35,7 +35,7 @@ def MakePandaStation(time_step = 0.002):
     AddPandaHand(controller_plant, controller_panda, welded = True) # welded so the controller doesn't care about the hand joints
     controller_plant.Finalize()
 
-    # add panda controller
+    # add panda controller. TODO(ben): make sure that this controller is realistic
     panda_controller = builder.AddSystem(
         pydrake.systems.controllers.InverseDynamicsController(
             controller_plant,
@@ -48,7 +48,7 @@ def MakePandaStation(time_step = 0.002):
     builder.Connect(plant.get_state_output_port(panda), panda_controller.get_input_port_estimated_state())
 
     # feedforward torque
-    adder = builder.AddSystem(pydrake.systems.primitves.Adder(2, num_panda_positions))
+    adder = builder.AddSystem(pydrake.systems.primitives.Adder(2, num_panda_positions))
     builder.Connect(panda_controller.get_output_port_control(),
                     adder.get_input_port(0))
     # passthrough to make the feedforward torque optional (default to zero values)
@@ -60,14 +60,26 @@ def MakePandaStation(time_step = 0.002):
 
     # add a discete derivative to find velocity command based on positional commands
     desired_state_from_position = builder.AddSystem(
-        pydrake.systems.primitives.StateInterpolationWithDiscreteDerivative(
+        pydrake.systems.primitives.StateInterpolatorWithDiscreteDerivative(
             num_panda_positions, time_step, suppress_initial_transient = True))
     desired_state_from_position.set_name("desired_state_from_position")
     builder.Connect(desired_state_from_position.get_output_port(),
                     panda_controller.get_input_port_desired_state())
     builder.Connect(panda_position.get_output_port(), desired_state_from_position.get_input_port())
 
-    # TODO(ben) panda hand controller
+    # TODO(ben): change this to panda hand controller
+    hand_controller = builder.AddSystem(pydrake.manipulation.schunk_wsg.SchunkWsgPositionController())
+    hand_controller.set_name("hand_controller")
+    builder.Connect(hand_controller.get_generalized_force_output_port(),             
+                    plant.get_actuation_input_port(hand))
+    builder.Connect(plant.get_state_output_port(hand), hand_controller.get_state_input_port())
+    builder.ExportInput(hand_controller.get_desired_position_input_port(), "hand_position")
+    builder.ExportInput(hand_controller.get_force_limit_input_port(), "hand_force_limit")
+    hand_mbp_state_to_hand_state = builder.AddSystem(
+        pydrake.manipulation.schunk_wsg.MakeMultibodyStateToWsgStateSystem())
+    builder.Connect(plant.get_state_output_port(hand), hand_mbp_state_to_hand_state.get_input_port())
+    builder.ExportOutput(hand_mbp_state_to_hand_state.get_output_port(), "hand_state_measured")
+    builder.ExportOutput(hand_controller.get_grip_force_output_port(), "hand_force_measured")
 
     # export cheat ports
     builder.ExportOutput(scene_graph.get_query_output_port(), "geometry_query")

@@ -24,7 +24,7 @@ def AddPanda(plant, q0 = [0.0, 0.1, 0, -1.2, 0, 1.6, 0], X_WB =  RigidTransform(
     plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("panda_link0"), X_WB)
     
     index = 0
-    for joint_index in plant.GetJointIndicies(panda_model_instance):
+    for joint_index in plant.GetJointIndices(panda_model_instance):
         joint = plant.get_mutable_joint(joint_index)
         if isinstance(joint, pydrake.multibody.tree.RevoluteJoint):
             joint.set_default_angle(q0[index])
@@ -40,11 +40,13 @@ def AddPandaHand(plant, panda_model_instance, roll = 0, welded = False):
     roll: the rotation of the hand relative to panda_link8
     welded: if we want the version with welded fingers (for control)
     """
+    parser = pydrake.multibody.parsing.Parser(plant)
 
     if welded:
-        gripper = parser.AddModelFromFile("./models/welded_panda_hand.urdf")
+    #TODO(ben): fix this so it works in general
+        gripper = parser.AddModelFromFile("/home/" + os.environ["USER"] + "/workspace/PandaStation/models/welded_panda_hand.urdf") 
     else:
-        gripper = parser.AddModelFromFile(pydrake.common.FindResourceOrThrow("drake/manipulation/models/panda_description/urdf/panda_hand.urdf"))
+        gripper = parser.AddModelFromFile(pydrake.common.FindResourceOrThrow("drake/manipulation/models/franka_description/urdf/hand.urdf"))
 
     X_8G = RigidTransform(RollPitchYaw(0, 0, roll), [0,0,0])
     plant.WeldFrames(plant.GetFrameByName("panda_link8", panda_model_instance), plant.GetFrameByName("panda_hand",gripper), X_8G)
