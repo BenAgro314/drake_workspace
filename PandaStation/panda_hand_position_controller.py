@@ -6,13 +6,19 @@ reference: https://github.com/RussTedrake/drake/blob/master/manipulation/schunk_
 import pydrake.all
 import numpy as np
 from pydrake.systems.framework import BasicVector
-from pydrake.systems.framework.System import get_input_port, get_output_port
+
+
+def MakeMultibodyStateToPandaHandStateSystem():
+    D = np.array([[-1, -1, 0, 0],
+                 [0, 0, -1, -1]])
+    return pydrake.systems.primitives.MatrixGain(D)
+    
 
 class PandaHandPdController(pydrake.systems.framework.LeafSystem):
 
     #TODO(ben): make sure these controller values are realistic
     def __init__(self, kp_command = 200., kd_command = 5., 
-                 kp_constraint = 2000., kd_constraint = 5.
+                 kp_constraint = 2000., kd_constraint = 5.,
                  default_force_limit = 40.):
         pydrake.systems.framework.LeafSystem.__init__(self)
 
@@ -26,18 +32,18 @@ class PandaHandPdController(pydrake.systems.framework.LeafSystem):
 
         self.desired_state_input_port = self.DeclareVectorInputPort(
                 "desired_state", 
-                BasicVector(2)).get_index()
+                BasicVector(2))
         self.force_limit_input_port = self.DeclareVectorInputPort(
                 "force_limit", 
-                BasicVector(1)).get_index()
+                BasicVector(1))
         self.state_input_port = self.DeclareVectorInputPort(
                 "state", 
-                BasicVector(2 * self.num_joints)).get_index()
+                BasicVector(2 * self.num_joints))
 
         self.generalized_force_output_port = self.DeclareVectorOutputPort(
                 "generalized_force",
                 BasicVector(self.num_joints),
-                self.CalcGeneralizedForceOutput).get_index()
+                self.CalcGeneralizedForceOutput)
         self.grip_force_output_port = self.DeclareVectorOutputPort(
                 "grip_force",
                 BasicVector(1),
@@ -50,33 +56,33 @@ class PandaHandPdController(pydrake.systems.framework.LeafSystem):
         return get_input_port(self.desired_state_input_port)
         
     def get_force_limit_input_port(self):
-        return get_input_port(self.force_limit_input_port)
+        return self.force_limit_input_port
 
     def get_state_input_port(self):
-        return get_input_port(self.state_input_port)
+        return self.state_input_port
 
     def get_generalized_force_output_port(self):
-        return get_output_port(self.generalized_force_output_port)
+        return self.generalized_force_output_port
 
     def get_grip_force_output_port(self):
-        return get_output_port(self.grip_force_output_port)
+        return self.grip_force_output_port
 
     def CalcGeneralizedForce(self, context):
-        desired_state = self.get_desired_state_input_port().Eval(context)
-        if (self.get_force_limit_port().HasValue(context)):
-            force_limit = self.get_force_limit_port().Eval(context)[0]
+        desired_state = self.desired_state_input_port.Eval(context)
+        if (self.force_limit_input_port.HasValue(context)):
+            force_limit = self.force_limit_input_port.Eval(context)[0]
         else:
             force_limit = self.default_force_limit
 
         if (force_limit <= 0):
             raise Exception("Force limit must be greater than 0")
 
-        state = self.get_state_input_port().Eval(context)
+        state = self.state_input_port.Eval(context)
 
         f0_plus_f1 = -self.kp_constraint * (state[0] + state[1]) - self.kd_constraint * (state[2] + state[3])
 
-        neg_f0_plus_f1 = self.kp_command * (desired_state[0] + state[0] - state[1]) +
-                         self.kd_command * (desired_state[1] + state[2] - state[3])
+        neg_f0_plus_f1 = self.kp_command * (desired_state[0] + state[0] - state[1]) + self.kd_command * (desired_state[1] + state[2] - state[3])
+
         if (neg_f0_plus_f1 > force_limit):
             neg_f0_plus_f1 = force_limit
         if (neg_f0_plus_f1 < -force_limit):
@@ -110,45 +116,32 @@ class PandaHandPositionController(pydrake.systems.framework.Diagram):
         self.kd_constraint = kd_constraint
         self.default_force_limit = default_force_limit
 
-        self.builder = pydrake.systems.framework.DiagramBuilder()
-        pd_controller = builder.AddSystem(
+        builder = pydrake.systems.framework.DiagramBuilder()
+        self.pd_controller = builder.AddSystem(
                 PandaHandPdController(
                     kp_command,
                     kd_command,
                     kp_constraint,
                     kd_constraint,
                     default_force_limit))
-        state_interpolator = builder.AddSystem(
+        self.state_interpolator = builder.AddSystem(
                 pydrake.systems.primitives.StateInterpolatorWithDiscreteDerivative(
                     1, time_step, suppress_initial_transient = True))
 
         self.desired_position_input_port = builder.ExportInput(
-                state_interpolator.get_input_port(), "desired_position")
+                self.state_interpolator.get_input_port(), "desired_position")
         self.force_limit_input_port = builder.ExportInput(
-                pd_controller.get_force_limit_input_port(), "force_limit")
+                self.pd_controller.get_force_limit_input_port(), "force_limit")
         self.state_input_port = builder.ExportInput(
-                pd_controller.get_state_input_port(), "state")
+                self.pd_controller.get_state_input_port(), "state")
 
         self.generalized_force_output_port = builder.ExportOutput(
-                pd_controller.get_generalized_force_output_port(), "generalized_force")
+                self.pd_controller.get_generalized_force_output_port(), "generalized_force")
         self.grip_force_output_port = builder.ExportOutput(
-                pd_controller.get_force_output_port(), "grip_force")
+                self.pd_controller.get_grip_force_output_port(), "grip_force")
 
         builder.BuildInto(self)
 
-    def get_desired_state_input_port(self):
-        return get_input_port(self.desired_state_input_port)
-        
-    def get_force_limit_input_port(self):
-        return get_input_port(self.force_limit_input_port)
 
-    def get_state_input_port(self):
-        return get_input_port(self.state_input_port)
-
-    def get_generalized_force_output_port(self):
-        return get_output_port(self.generalized_force_output_port)
-
-    def get_grip_force_output_port(self):
-        return get_output_port(self.grip_force_output_port)
 
 

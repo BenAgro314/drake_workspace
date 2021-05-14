@@ -1,5 +1,6 @@
 import pydrake.all
 from .scenarios import AddPanda, AddPandaHand
+from .panda_hand_position_controller import PandaHandPositionController, MakeMultibodyStateToPandaHandStateSystem
 
 def MakePandaStation(time_step = 0.002):
     """Constructs a PandaStation"""
@@ -67,19 +68,19 @@ def MakePandaStation(time_step = 0.002):
                     panda_controller.get_input_port_desired_state())
     builder.Connect(panda_position.get_output_port(), desired_state_from_position.get_input_port())
 
-    # TODO(ben): change this to panda hand controller
-    hand_controller = builder.AddSystem(pydrake.manipulation.schunk_wsg.SchunkWsgPositionController())
+    # TODO(ben): make sure this hand controller is accurate
+    hand_controller = builder.AddSystem(PandaHandPositionController())
     hand_controller.set_name("hand_controller")
-    builder.Connect(hand_controller.get_generalized_force_output_port(),             
+    builder.Connect(hand_controller.GetOutputPort("generalized_force"),             
                     plant.get_actuation_input_port(hand))
-    builder.Connect(plant.get_state_output_port(hand), hand_controller.get_state_input_port())
-    builder.ExportInput(hand_controller.get_desired_position_input_port(), "hand_position")
-    builder.ExportInput(hand_controller.get_force_limit_input_port(), "hand_force_limit")
+    builder.Connect(plant.get_state_output_port(hand), hand_controller.GetInputPort("state"))
+    builder.ExportInput(hand_controller.GetInputPort("desired_position"), "hand_position")
+    builder.ExportInput(hand_controller.GetInputPort("force_limit"), "hand_force_limit")
     hand_mbp_state_to_hand_state = builder.AddSystem(
-        pydrake.manipulation.schunk_wsg.MakeMultibodyStateToWsgStateSystem())
+                                            MakeMultibodyStateToPandaHandStateSystem())
     builder.Connect(plant.get_state_output_port(hand), hand_mbp_state_to_hand_state.get_input_port())
     builder.ExportOutput(hand_mbp_state_to_hand_state.get_output_port(), "hand_state_measured")
-    builder.ExportOutput(hand_controller.get_grip_force_output_port(), "hand_force_measured")
+    builder.ExportOutput(hand_controller.GetOutputPort("grip_force"), "hand_force_measured")
 
     # export cheat ports
     builder.ExportOutput(scene_graph.get_query_output_port(), "geometry_query")
