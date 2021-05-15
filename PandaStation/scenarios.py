@@ -32,6 +32,7 @@ def AddPanda(plant, q0 = [0.0, 0.1, 0, -1.2, 0, 1.6, 0], X_WB =  RigidTransform(
 
     return panda_model_instance
 
+
 def AddPandaHand(plant, panda_model_instance, roll = 0, welded = False):
     """Adds a hand to the panda arm (panda_link8)
 
@@ -62,6 +63,7 @@ def AddShape(plant, shape, name, mass = 1, mu = 1, color = [0.5, 0.5, 0.9, 1]):
     mu: the frictional coefficient of the shape
     color: the color of the shape
     """
+    instance = plant.AddModelInstance(name)
 
     if isinstance(shape, pydrake.geometry.Box):
         inertia = pydrake.multibody.tree.UnitIntertia.SolidBox(
@@ -76,7 +78,8 @@ def AddShape(plant, shape, name, mass = 1, mu = 1, color = [0.5, 0.5, 0.9, 1]):
     body = plant.AddRigidBody(
         name, instance,
         pydrake.multibody.tree.SpatialInertia(mass = mass, 
-                                              p_PScm_E = np.array([0.,0.,0.])))
+                                              p_PScm_E = np.array([0.,0.,0.]),
+                                              G_SP_E = inertia))
 
     if plant.geometry_source_is_registered():
         if isinstance(shape, pydrake.geometry.Box):
@@ -100,7 +103,7 @@ def AddShape(plant, shape, name, mass = 1, mu = 1, color = [0.5, 0.5, 0.9, 1]):
         else:
             plant.RegisterCollisionGeometry(
                 body, RigidTransform(), shape, name,
-                pydrake.geometry.plant.CoulombFriction(mu, mu))
+                pydrake.multibody.plant.CoulombFriction(mu, mu))
 
         plant.RegisterVisualGeometry(body, RigidTransform(), shape, name, color)
 
