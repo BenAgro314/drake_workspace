@@ -1,29 +1,41 @@
 import pydrake.all
 from .scenarios import AddPanda, AddPandaHand
 from .panda_hand_position_controller import PandaHandPositionController, MakeMultibodyStateToPandaHandStateSystem
+import numpy as np
 
 class PandaStation(pydrake.systems.framework.Diagram):
 
     def __init__(self, time_step = 0.002):
 
+        pydrake.systems.framework.Diagram.__init__(self)
+
         self.time_step = 0.002
 
         self.builder = pydrake.systems.framework.DiagramBuilder()
-        pydrake.systems.framework.Diagram.__init__(self)
         self.plant, self.scene_graph = pydrake.multibody.plant.AddMultibodyPlantSceneGraph(
                                                         self.builder, time_step = self.time_step)
+        self.setup = None
         self.plant.set_name("plant")
         self.set_name("panda_station")
+        self.object_ids = []
+        self.object_poses = []
 
 
     def Finalize(self):
         """Constructs a PandaStation"""
 
-        self.panda_instance = panda = AddPanda(self.plant)
-        hand = AddPandaHand(self.plant, panda)
-        self.plant.Finalize()
+        assert self.panda.is_valid(), "No panda model added"
+        assert self.hand.is_valid(), "No panda hand model added"
 
-        num_panda_positions = self.plant.num_positions(panda)
+
+        self.plant.Finalize()
+        
+        for i in range(len(self.object_ids)):
+            body_index = self.object_ids[i]
+            body = self.plant.get_body(body_index)
+            self.plant.SetDefaultFreeBodyPose(body, self.object_poses[i])
+
+        num_panda_positions = self.plant.num_positions(self.panda)
 
         # add a "pass through" to the system. A pass through is input -> output
         panda_position = self.builder.AddSystem(pydrake.systems.primitives.PassThrough(num_panda_positions))
@@ -34,11 +46,11 @@ class PandaStation(pydrake.systems.framework.Diagram):
         # demux with inputs for panda joint positions and velocities (panda state)
         demux = self.builder.AddSystem(pydrake.systems.primitives.Demultiplexer(
             2 * num_panda_positions, num_panda_positions))
-        self.builder.Connect(self.plant.get_state_output_port(panda), demux.get_input_port())
+        self.builder.Connect(self.plant.get_state_output_port(self.panda), demux.get_input_port())
         # sticking to naming conventions from manipulation station for ports
         self.builder.ExportOutput(demux.get_output_port(0), "panda_position_measured") 
         self.builder.ExportOutput(demux.get_output_port(1), "panda_velocity_estimated")
-        self.builder.ExportOutput(self.plant.get_state_output_port(panda), "panda_state_estimated")
+        self.builder.ExportOutput(self.plant.get_state_output_port(self.panda), "panda_state_estimated")
 
         # plant for the panda controller
         controller_plant = pydrake.multibody.plant.MultibodyPlant(time_step = self.time_step)
@@ -56,7 +68,7 @@ class PandaStation(pydrake.systems.framework.Diagram):
                 has_reference_acceleration = False))
 
         panda_controller.set_name("panda_controller")
-        self.builder.Connect(self.plant.get_state_output_port(panda), panda_controller.get_input_port_estimated_state())
+        self.builder.Connect(self.plant.get_state_output_port(self.panda), panda_controller.get_input_port_estimated_state())
 
         # feedforward torque
         adder = self.builder.AddSystem(pydrake.systems.primitives.Adder(2, num_panda_positions))
@@ -67,7 +79,7 @@ class PandaStation(pydrake.systems.framework.Diagram):
             pydrake.systems.primitives.PassThrough([0]*num_panda_positions))
         self.builder.Connect(torque_passthrough.get_output_port(), adder.get_input_port(1))
         self.builder.ExportInput(torque_passthrough.get_input_port(), "panda_feedforward_torque")
-        self.builder.Connect(adder.get_output_port(), self.plant.get_actuation_input_port(panda))
+        self.builder.Connect(adder.get_output_port(), self.plant.get_actuation_input_port(self.panda))
 
         # add a discete derivative to find velocity command based on positional commands
         desired_state_from_position = self.builder.AddSystem(
@@ -82,13 +94,13 @@ class PandaStation(pydrake.systems.framework.Diagram):
         hand_controller = self.builder.AddSystem(PandaHandPositionController())
         hand_controller.set_name("hand_controller")
         self.builder.Connect(hand_controller.GetOutputPort("generalized_force"),             
-                        self.plant.get_actuation_input_port(hand))
-        self.builder.Connect(self.plant.get_state_output_port(hand), hand_controller.GetInputPort("state"))
+                        self.plant.get_actuation_input_port(self.hand))
+        self.builder.Connect(self.plant.get_state_output_port(self.hand), hand_controller.GetInputPort("state"))
         self.builder.ExportInput(hand_controller.GetInputPort("desired_position"), "hand_position")
         self.builder.ExportInput(hand_controller.GetInputPort("force_limit"), "hand_force_limit")
         hand_mbp_state_to_hand_state = self.builder.AddSystem(
                                                 MakeMultibodyStateToPandaHandStateSystem())
-        self.builder.Connect(self.plant.get_state_output_port(hand), hand_mbp_state_to_hand_state.get_input_port())
+        self.builder.Connect(self.plant.get_state_output_port(self.hand), hand_mbp_state_to_hand_state.get_input_port())
         self.builder.ExportOutput(hand_mbp_state_to_hand_state.get_output_port(), "hand_state_measured")
         self.builder.ExportOutput(hand_controller.GetOutputPort("grip_force"), "hand_force_measured")
 
@@ -103,6 +115,7 @@ class PandaStation(pydrake.systems.framework.Diagram):
 
         self.builder.BuildInto(self) 
 
+
     def get_multibody_plant(self):
         return self.plant
 
@@ -111,6 +124,70 @@ class PandaStation(pydrake.systems.framework.Diagram):
 
     def GetPandaPosition(self, station_context):
         plant_context = self.GetSubsystemContext(self.plant, station_context)
-        return self.plant.GetPositions(plant_context, self.panda_instance)
+        return self.plant.GetPositions(plant_context, self.panda)
 
+    def SetPandaPosition(self, station_context, state, q):
+        num_panda_positions = self.plant.num_positions(self.panda)
+        assert len(q) == num_panda_positions, "Incorrect size of q, needs to be 7"
+
+        plant_context = self.GetSubsystemContext(self.plant, station_context)
+        plant_state = self.GetMutableSubsystemState(self.plant, state)
+        self.plant.SetPositions(plant_context, plant_state, self.panda, q)
+
+    def SetPandaVelocity(self, station_context, state, v):
+        num_panda_positions = self.plant.num_positions(self.panda)
+        assert len(v) == num_panda_positions, "Incorrect size of v, needs to be 7"
+
+        plant_context = self.GetSubsystemContext(self.plant, station_context)
+        plant_state = self.GetMutableSubsystemState(self.plant, state)
+        self.plant.SetVelocities(plant_context, plant_state, self.panda, v)
+
+    def SetHandPosition(self, station_context, state, q):
+        
+        plant_context = self.GetSubsystemContext(self.plant, station_context)
+        plant_state = self.GetMutableSubsystemState(self.plant, state)
+        self.plant.SetPositions(plant_context, plant_state, self.hand, [q/2.0, q/2.0])
+
+    def SetHandVelocity(self, station_context, state, v):
+       
+        plant_context = self.GetSubsystemContext(self.plant, station_context)
+        plant_state = self.GetMutableSubsystemState(self.plant, state)
+        self.plant.SetVelocities(plant_context, plant_state, self.hand, [v/2.0, v/2.0])
+
+    def SetupDefaultStation(self):
+        self.panda = AddPanda(self.plant)
+        self.hand = AddPandaHand(self.plant, self.panda)
+
+    def SetupBinStation(self):
+        self.setup = "BinStation"
+        parser = pydrake.multibody.parsing.Parser(self.plant)
+
+        bin_file = pydrake.common.FindResourceOrThrow(
+                "drake/examples/manipulation_station/models/bin.sdf")
+
+        # add first bin
+        X_WC = pydrake.math.RigidTransform(
+                pydrake.math.RotationMatrix.MakeZRotation(np.pi/2), [-0.145, -0.63, 0.075])
+        bin1 = parser.AddModelFromFile(bin_file, "bin1")
+        self.plant.WeldFrames(self.plant.world_frame(), self.plant.GetFrameByName('bin_base', bin1), X_WC)
+
+        # add second bin
+        X_WC = pydrake.math.RigidTransform(
+                pydrake.math.RotationMatrix.MakeZRotation(np.pi), [0.5, -0.1, 0.075])
+        bin2 = parser.AddModelFromFile(bin_file, "bin2")
+        self.plant.WeldFrames(self.plant.world_frame(), self.plant.GetFrameByName('bin_base', bin2), X_WC)
+
+        self.SetupDefaultStation() #adds hand and arm
+
+
+    def AddManipulandFromFile(self, model_file, X_WObject):
+        parser = pydrake.multibody.parsing.Parser(self.plant)
+        number = str(len(self.object_ids))
+        name = "added_model_"+number
+        model = parser.AddModelFromFile(pydrake.common.FindResourceOrThrow(model_file), name)
+        indices = self.plant.GetBodyIndices(model)
+        # TODO(ben): generalize this to add any model
+        assert len(indices) == 1, "Curently, we only support manipulands with one body"
+        self.object_ids.append(indices[0])
+        self.object_poses.append(X_WObject)
 
