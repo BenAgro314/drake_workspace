@@ -66,7 +66,7 @@ def AddShape(plant, shape, name, mass = 1, mu = 1, color = [0.5, 0.5, 0.9, 1]):
     instance = plant.AddModelInstance(name)
 
     if isinstance(shape, pydrake.geometry.Box):
-        inertia = pydrake.multibody.tree.UnitIntertia.SolidBox(
+        inertia = pydrake.multibody.tree.UnitInertia.SolidBox(
             shape.width(), shape.depth(), shape.height())
     elif isinstance(shape, pydrake.geometry.Cylinder):
         inertia = pydrake.multibody.tree.UnitInertia.SolidCylinder(
