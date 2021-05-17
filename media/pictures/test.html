@@ -1,0 +1,288 @@
+
+<script src="https://unpkg.com/gojs/release/go-debug.js"></script>
+
+<script>
+  $ = go.GraphObject.make
+  var diagram = $(go.Diagram, "myDiagramDiv", {
+    "undoManager.isEnabled": true,
+    initialAutoScale: go.Diagram.Uniform
+  });
+  diagram.layout = $(go.LayeredDigraphLayout, {
+    layerSpacing: 20,
+    columnSpacing: 20,
+    isRealtime: false
+  });
+
+  diagram.groupTemplate = $(
+    go.Group,
+    "Auto",
+    { layout: $(go.LayeredDigraphLayout, { direction: 0, columnSpacing: 10 }) },
+    new go.Binding("isSubGraphExpanded", "expanded"),
+    $(
+      go.Shape,
+      "RoundedRectangle", // surrounds everything
+      { parameter1: 10, fill: "rgba(128,128,128,0.33)" }
+    ),
+    $(
+      go.Panel,
+      "Vertical", // position header above the subgraph
+      { defaultAlignment: go.Spot.Left },
+      $(
+        go.Panel,
+        "Horizontal", // the header
+        { defaultAlignment: go.Spot.Top },
+        $("SubGraphExpanderButton"), // this Panel acts as a Button
+        $(
+          go.TextBlock, // group title near top, next to button
+          { font: "Bold 12pt Sans-Serif" },
+          new go.Binding("text", "name")
+        )
+      ),
+      $(
+        go.Placeholder, // represents area for all member parts
+        { padding: new go.Margin(0, 10), background: "white" }
+      )
+    )
+  );
+  var systemTemplate = $(
+    go.Node,
+    "Auto",
+    $(go.Shape, "RoundedRectangle", {
+      parameter1: 10,
+      fill: "rgba(128,128,228,0.33)"
+    }),
+    $(
+      go.Panel,
+      "Table",
+      { margin: 10 },
+      $(
+        go.TextBlock,
+        { row: 0, column: 0, columnSpan: 2, alignment: go.Spot.Center },
+        { font: "bold 12pt sans-serif" },
+        new go.Binding("text", "key")
+      ),
+      $(go.RowColumnDefinition, {
+        row: 1,
+        separatorStrokeWidth: 1.5,
+        separatorStroke: "black"
+      }),
+      $(go.TextBlock, {
+        // add a spacer
+        row: 1,
+        column: 0,
+        columnSpan: 2,
+        height: 10
+      }),
+      $(
+        go.Panel,
+        "Vertical",
+        { name: "INPUT_PORTS" },
+        new go.Binding("itemArray", "input_ports"),
+        {
+          row: 2,
+          column: 0,
+          alignment: go.Spot.Left,
+          itemTemplate: $(
+            go.Panel,
+            "Auto",
+            { margin: 2 },
+            $(go.Shape, "RoundedRectangle", { fill: "lightcyan" }),
+            $(go.TextBlock, new go.Binding("text", "name"), {
+              margin: 2
+            }),
+            new go.Binding("portId", "id")
+          ) // end of itemTemplate
+        }
+      ),
+      $(
+        go.Panel,
+        "Vertical",
+        { name: "OUTPUT_PORTS" },
+        new go.Binding("itemArray", "output_ports"),
+        {
+          row: 2,
+          column: 1,
+          alignment: go.Spot.Right,
+          itemTemplate: $(
+            go.Panel,
+            "Auto",
+            { margin: 2 },
+            $(go.Shape, "RoundedRectangle", { fill: "lightcyan" }),
+            $(go.TextBlock, new go.Binding("text", "name"), {
+              margin: 2
+            }),
+            new go.Binding("portId", "id")
+          ) // end of itemTemplate
+        }
+      )
+    )
+  );
+
+  var portTemplate = $(
+    go.Node,
+    "Auto",
+    $(go.Shape, "RoundedRectangle", {
+      parameter1: 10,
+      fill: "honeydew"
+    }),
+    $(
+      go.TextBlock,
+      { row: 0, column: 0, columnSpan: 2, alignment: go.Spot.Right },
+      new go.Binding("text", "name")
+    )
+  );
+
+  var templmap = new go.Map();
+  templmap.add("", systemTemplate);
+  templmap.add("input_port", portTemplate);
+  templmap.add("output_port", portTemplate);
+  diagram.nodeTemplateMap = templmap;
+
+  diagram.model = $(go.GraphLinksModel, {
+    linkFromPortIdProperty: "fromPort", // required information:
+    linkToPortIdProperty: "toPort", // identifies data property names
+    nodeDataArray: [
+{ key: "", name: "", group: "", isGroup: true, expanded: true, },
+{ key: "panda_station", name: "panda_station", group: "", isGroup: true, expanded: false, },
+{ key: "panda_station_inputs", name: "Input Ports", group: "panda_station", isGroup: true, },
+{ key: "panda_station_u0", name: "panda_position", group: "panda_station_inputs", category: "input_port", },
+{ key: "panda_station_u1", name: "panda_feedforward_torque", group: "panda_station_inputs", category: "input_port", },
+{ key: "panda_station_u2", name: "hand_position", group: "panda_station_inputs", category: "input_port", },
+{ key: "panda_station_u3", name: "hand_force_limit", group: "panda_station_inputs", category: "input_port", },
+{ key: "panda_station_outputs", name: "Output Ports", group: "panda_station", isGroup: true, },
+{ key: "panda_station_y0", name: "panda_position_command", group: "panda_station_outputs", category: "output_port", },
+{ key: "panda_station_y1", name: "panda_position_measured", group: "panda_station_outputs", category: "output_port", },
+{ key: "panda_station_y2", name: "panda_velocity_estimated", group: "panda_station_outputs", category: "output_port", },
+{ key: "panda_station_y3", name: "panda_state_estimated", group: "panda_station_outputs", category: "output_port", },
+{ key: "panda_station_y4", name: "hand_state_measured", group: "panda_station_outputs", category: "output_port", },
+{ key: "panda_station_y5", name: "hand_force_measured", group: "panda_station_outputs", category: "output_port", },
+{ key: "panda_station_y6", name: "geometry_query", group: "panda_station_outputs", category: "output_port", },
+{ key: "panda_station_y7", name: "contact_results", group: "panda_station_outputs", category: "output_port", },
+{ key: "panda_station_y8", name: "plant_continuous_state", group: "panda_station_outputs", category: "output_port", },
+{ key: "panda_station_y9", name: "query_object", group: "panda_station_outputs", category: "output_port", },
+{ key: "plant", group: "panda_station", input_ports: [ { name: "geometry_query", id: "u0" }, { name: "WorldModelInstance_actuation", id: "u1" }, { name: "DefaultModelInstance_actuation", id: "u2" }, { name: "panda_actuation", id: "u3" }, { name: "hand_actuation", id: "u4" }, { name: "applied_generalized_force", id: "u5" }, { name: "applied_spatial_force", id: "u6" }, ],
+output_ports: [ { name: "geometry_pose", id: "y0" }, { name: "continuous_state", id: "y1" }, { name: "body_poses", id: "y2" }, { name: "spatial_velocities", id: "y3" }, { name: "spatial_accelerations", id: "y4" }, { name: "generalized_acceleration", id: "y5" }, { name: "WorldModelInstance_continuous_state", id: "y6" }, { name: "WorldModelInstance_generalized_acceleration", id: "y7" }, { name: "DefaultModelInstance_continuous_state", id: "y8" }, { name: "DefaultModelInstance_generalized_acceleration", id: "y9" }, { name: "panda_continuous_state", id: "y10" }, { name: "panda_generalized_acceleration", id: "y11" }, { name: "hand_continuous_state", id: "y12" }, { name: "hand_generalized_acceleration", id: "y13" }, { name: "WorldModelInstance_generalized_contact_forces", id: "y14" }, { name: "DefaultModelInstance_generalized_contact_forces", id: "y15" }, { name: "panda_generalized_contact_forces", id: "y16" }, { name: "hand_generalized_contact_forces", id: "y17" }, { name: "reaction_forces", id: "y18" }, { name: "contact_results", id: "y19" }, ],
+},
+{ key: "scene_graph", group: "panda_station", input_ports: [ { name: "plant_pose", id: "u0" }, ],
+output_ports: [ { name: "lcm_visualization", id: "y0" }, { name: "query", id: "y1" }, ],
+},
+{ key: "drake/systems/PassThrough@000000000268bd70", group: "panda_station", input_ports: [ { name: "u", id: "u0" }, ],
+output_ports: [ { name: "y", id: "y0" }, ],
+},
+{ key: "drake/systems/Demultiplexer@00000000026542d0", group: "panda_station", input_ports: [ { name: "u0", id: "u0" }, ],
+output_ports: [ { name: "y0", id: "y0" }, { name: "y1", id: "y1" }, ],
+},
+{ key: "panda_controller", name: "panda_controller", group: "panda_station", isGroup: true, expanded: false, },
+{ key: "panda_controller_inputs", name: "Input Ports", group: "panda_controller", isGroup: true, },
+{ key: "panda_controller_u0", name: "estimated_state", group: "panda_controller_inputs", category: "input_port", },
+{ key: "panda_controller_u1", name: "desired_state", group: "panda_controller_inputs", category: "input_port", },
+{ key: "panda_controller_outputs", name: "Output Ports", group: "panda_controller", isGroup: true, },
+{ key: "panda_controller_y0", name: "force", group: "panda_controller_outputs", category: "output_port", },
+{ key: "drake/systems/controllers/InverseDynamics@0000000002797a20", group: "panda_controller", input_ports: [ { name: "u0", id: "u0" }, { name: "u1", id: "u1" }, ],
+output_ports: [ { name: "y0", id: "y0" }, ],
+},
+{ key: "drake/systems/controllers/PidController@0000000002728c10", group: "panda_controller", input_ports: [ { name: "estimated_state", id: "u0" }, { name: "desired_state", id: "u1" }, ],
+output_ports: [ { name: "control", id: "y0" }, ],
+},
+{ key: "drake/systems/Adder@00000000025d7090", group: "panda_controller", input_ports: [ { name: "u0", id: "u0" }, { name: "u1", id: "u1" }, ],
+output_ports: [ { name: "sum", id: "y0" }, ],
+},
+{ key: "drake/systems/ConstantVectorSource@000000000279c4c0", group: "panda_controller", input_ports: [ ],
+output_ports: [ { name: "y0", id: "y0" }, ],
+},
+{ key: "drake/systems/Adder@000000000279dbe0", group: "panda_station", input_ports: [ { name: "u0", id: "u0" }, { name: "u1", id: "u1" }, ],
+output_ports: [ { name: "sum", id: "y0" }, ],
+},
+{ key: "drake/systems/PassThrough@00000000025f9220", group: "panda_station", input_ports: [ { name: "u", id: "u0" }, ],
+output_ports: [ { name: "y", id: "y0" }, ],
+},
+{ key: "desired_state_from_position", name: "desired_state_from_position", group: "panda_station", isGroup: true, expanded: false, },
+{ key: "desired_state_from_position_inputs", name: "Input Ports", group: "desired_state_from_position", isGroup: true, },
+{ key: "desired_state_from_position_u0", name: "position", group: "desired_state_from_position_inputs", category: "input_port", },
+{ key: "desired_state_from_position_outputs", name: "Output Ports", group: "desired_state_from_position", isGroup: true, },
+{ key: "desired_state_from_position_y0", name: "state", group: "desired_state_from_position_outputs", category: "output_port", },
+{ key: "drake/systems/DiscreteDerivative@0000000002717880", group: "desired_state_from_position", input_ports: [ { name: "u", id: "u0" }, ],
+output_ports: [ { name: "dudt", id: "y0" }, ],
+},
+{ key: "drake/systems/Multiplexer@000000000279f570", group: "desired_state_from_position", input_ports: [ { name: "u0", id: "u0" }, { name: "u1", id: "u1" }, ],
+output_ports: [ { name: "y0", id: "y0" }, ],
+},
+{ key: "hand_controller", name: "hand_controller", group: "panda_station", isGroup: true, expanded: false, },
+{ key: "hand_controller_inputs", name: "Input Ports", group: "hand_controller", isGroup: true, },
+{ key: "hand_controller_u0", name: "desired_position", group: "hand_controller_inputs", category: "input_port", },
+{ key: "hand_controller_u1", name: "force_limit", group: "hand_controller_inputs", category: "input_port", },
+{ key: "hand_controller_u2", name: "state", group: "hand_controller_inputs", category: "input_port", },
+{ key: "hand_controller_outputs", name: "Output Ports", group: "hand_controller", isGroup: true, },
+{ key: "hand_controller_y0", name: "generalized_force", group: "hand_controller_outputs", category: "output_port", },
+{ key: "hand_controller_y1", name: "grip_force", group: "hand_controller_outputs", category: "output_port", },
+{ key: "panda_hand_controller", group: "hand_controller", input_ports: [ { name: "desired_state", id: "u0" }, { name: "force_limit", id: "u1" }, { name: "state", id: "u2" }, ],
+output_ports: [ { name: "generalized_force", id: "y0" }, { name: "grip_force", id: "y1" }, ],
+},
+{ key: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0", name: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0", group: "hand_controller", isGroup: true, expanded: false, },
+{ key: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_inputs", name: "Input Ports", group: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0", isGroup: true, },
+{ key: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_u0", name: "position", group: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_inputs", category: "input_port", },
+{ key: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_outputs", name: "Output Ports", group: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0", isGroup: true, },
+{ key: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_y0", name: "state", group: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_outputs", category: "output_port", },
+{ key: "drake/systems/DiscreteDerivative@0000000002950d50", group: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0", input_ports: [ { name: "u", id: "u0" }, ],
+output_ports: [ { name: "dudt", id: "y0" }, ],
+},
+{ key: "drake/systems/Multiplexer@00000000025f70b0", group: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0", input_ports: [ { name: "u0", id: "u0" }, { name: "u1", id: "u1" }, ],
+output_ports: [ { name: "y0", id: "y0" }, ],
+},
+{ key: "drake/systems/MatrixGain@0000000002570150", group: "panda_station", input_ports: [ { name: "u0", id: "u0" }, ],
+output_ports: [ { name: "y0", id: "y0" }, ],
+},
+
+    ],
+    linkDataArray: [
+{ from: "plant", fromPort: "y12", to: "drake/systems/MatrixGain@0000000002570150", toPort: "u0", },
+{ from: "plant", fromPort: "y10", to: "drake/systems/Demultiplexer@00000000026542d0", toPort: "u0", },
+{ from: "plant", fromPort: "y10", to: "panda_controller_u0", },
+{ from: "desired_state_from_position_y0", to: "panda_controller_u1", },
+{ from: "drake/systems/PassThrough@000000000268bd70", fromPort: "y0", to: "desired_state_from_position_u0", },
+{ from: "panda_controller_y0", to: "drake/systems/Adder@000000000279dbe0", toPort: "u0", },
+{ from: "drake/systems/PassThrough@00000000025f9220", fromPort: "y0", to: "drake/systems/Adder@000000000279dbe0", toPort: "u1", },
+{ from: "scene_graph", fromPort: "y1", to: "plant", toPort: "u0", },
+{ from: "drake/systems/Adder@000000000279dbe0", fromPort: "y0", to: "plant", toPort: "u3", },
+{ from: "hand_controller_y0", to: "plant", toPort: "u4", },
+{ from: "plant", fromPort: "y0", to: "scene_graph", toPort: "u0", },
+{ from: "plant", fromPort: "y12", to: "hand_controller_u2", },
+{ from: "panda_station_u0", to: "drake/systems/PassThrough@000000000268bd70", toPort: "u0", },
+{ from: "panda_station_u1", to: "drake/systems/PassThrough@00000000025f9220", toPort: "u0", },
+{ from: "panda_station_u2", to: "hand_controller_u0", },
+{ from: "panda_station_u3", to: "hand_controller_u1", },
+{ from: "drake/systems/PassThrough@000000000268bd70", fromPort: "y0", to: "panda_station_y0", },
+{ from: "drake/systems/Demultiplexer@00000000026542d0", fromPort: "y0", to: "panda_station_y1", },
+{ from: "drake/systems/Demultiplexer@00000000026542d0", fromPort: "y1", to: "panda_station_y2", },
+{ from: "plant", fromPort: "y10", to: "panda_station_y3", },
+{ from: "drake/systems/MatrixGain@0000000002570150", fromPort: "y0", to: "panda_station_y4", },
+{ from: "hand_controller_y1", to: "panda_station_y5", },
+{ from: "scene_graph", fromPort: "y1", to: "panda_station_y6", },
+{ from: "plant", fromPort: "y19", to: "panda_station_y7", },
+{ from: "plant", fromPort: "y1", to: "panda_station_y8", },
+{ from: "scene_graph", fromPort: "y1", to: "panda_station_y9", },
+{ from: "drake/systems/controllers/PidController@0000000002728c10", fromPort: "y0", to: "drake/systems/Adder@00000000025d7090", toPort: "u0", },
+{ from: "drake/systems/ConstantVectorSource@000000000279c4c0", fromPort: "y0", to: "drake/systems/Adder@00000000025d7090", toPort: "u1", },
+{ from: "drake/systems/Adder@00000000025d7090", fromPort: "y0", to: "drake/systems/controllers/InverseDynamics@0000000002797a20", toPort: "u1", },
+{ from: "panda_controller_u0", to: "drake/systems/controllers/PidController@0000000002728c10", toPort: "u0", },
+{ from: "panda_controller_u0", to: "drake/systems/controllers/InverseDynamics@0000000002797a20", toPort: "u0", },
+{ from: "panda_controller_u1", to: "drake/systems/controllers/PidController@0000000002728c10", toPort: "u1", },
+{ from: "drake/systems/controllers/InverseDynamics@0000000002797a20", fromPort: "y0", to: "panda_controller_y0", },
+{ from: "drake/systems/DiscreteDerivative@0000000002717880", fromPort: "y0", to: "drake/systems/Multiplexer@000000000279f570", toPort: "u1", },
+{ from: "desired_state_from_position_u0", to: "drake/systems/DiscreteDerivative@0000000002717880", toPort: "u0", },
+{ from: "desired_state_from_position_u0", to: "drake/systems/Multiplexer@000000000279f570", toPort: "u0", },
+{ from: "drake/systems/Multiplexer@000000000279f570", fromPort: "y0", to: "desired_state_from_position_y0", },
+{ from: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_y0", to: "panda_hand_controller", toPort: "u0", },
+{ from: "hand_controller_u0", to: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_u0", },
+{ from: "hand_controller_u1", to: "panda_hand_controller", toPort: "u1", },
+{ from: "hand_controller_u2", to: "panda_hand_controller", toPort: "u2", },
+{ from: "panda_hand_controller", fromPort: "y0", to: "hand_controller_y0", },
+{ from: "panda_hand_controller", fromPort: "y1", to: "hand_controller_y1", },
+{ from: "drake/systems/DiscreteDerivative@0000000002950d50", fromPort: "y0", to: "drake/systems/Multiplexer@00000000025f70b0", toPort: "u1", },
+{ from: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_u0", to: "drake/systems/Multiplexer@00000000025f70b0", toPort: "u0", },
+{ from: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_u0", to: "drake/systems/DiscreteDerivative@0000000002950d50", toPort: "u0", },
+{ from: "drake/systems/Multiplexer@00000000025f70b0", fromPort: "y0", to: "drake/systems/StateInterpolatorWithDiscreteDerivative@00000000026510e0_y0", },
+
+    ]
+  });
+</script>
