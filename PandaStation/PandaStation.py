@@ -138,7 +138,7 @@ class PandaStation(pydrake.systems.framework.Diagram):
         num_panda_positions = self.plant.num_positions(self.panda)
         assert len(v) == num_panda_positions, "Incorrect size of v, needs to be 7"
 
-        plant_context = self.GetSubsystemContext(self.plant, station_context)
+        plant_context = self.GetSubsystemContext(self.plant, multibody)
         plant_state = self.GetMutableSubsystemState(self.plant, state)
         self.plant.SetVelocities(plant_context, plant_state, self.panda, v)
 
