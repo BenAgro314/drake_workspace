@@ -12,11 +12,28 @@ from pydrake.solvers.mathematicalprogram import MathematicalProgram, Solve
 
 
 
+class PandaIKTraj:
+    """ Given a starting gripper pose and a goal gripper pose, find satisfactory
+    joint trajectories based on constraints/costs.
 
-class PandaInverseKinematics:
+    Solves the problem using trajectory optimization 
+    """
 
+    # solve conneted IK problems at discrete intervals, and connect them 
+    # with a spline (peicewise polynomials)
 
-    def __init__(self, plant, plant_context, model_instance, avoid_names = [], end_effector = "panda_hand"):
+    def __init__(self, 
+            plant, 
+            plant_context, 
+            model_instance,
+            start_pose, # RigidTransform
+            goal_pose, # RigidTransform
+            num_points,  # the number of intermediate IK solutions
+            p_tol = 0.01,
+            theta_tol = 0.01,
+            avoid_names = [], 
+            end_effector = "panda_hand"):
+            
         self.plant_f = plant
         self.context_f = plant_context
         self.plant_ad = self.plant_f.ToAutoDiffXd()
@@ -28,19 +45,21 @@ class PandaInverseKinematics:
         self.W = self.plant_f.world_frame()
         self.L = self.plant_f.GetFrameByName(end_effector)
 
-        self.prog = MathematicalProgram()
         self.num_positions = plant.num_positions(self.model_instance)
-        self.q = self.prog.NewContinuousVariables(self.num_positions)
+        self.num_points = num_points 
+        self.start_pose = start_pose
+        self.goal_pose = goal_pose
+        
 
-        # add constraint to respect joint limits 
+        # find joint limits
         joint_indices = plant.GetJointIndices(model_instance)[:self.num_positions] # remove the last joint because they are fixed
         joint_limits = {'lower': [], 'upper': []}
         for ind in joint_indices:
             joint = plant.get_joint(ind)
             joint_limits['lower'].append(joint.position_lower_limits()[0])
             joint_limits['upper'].append(joint.position_upper_limits()[0])
-        self.prog.AddBoundingBoxConstraint(joint_limits['lower'], joint_limits['upper'], self.q)
-        # we want to find the indicies of the generalized positions of the arm in all of the generalized positions (they will be contiguous in the array)
+
+        # identify which positions in the multibody plant are those of the arm
         lower_lims = plant.GetPositionLowerLimits()
         self.lower_ind = np.where(lower_lims == -2.8973)[0][0] 
 
@@ -58,9 +77,44 @@ class PandaInverseKinematics:
             bodies = self.plant_f.GetBodyIndices(plant.GetModelInstanceByName(name))
             for i in bodies:
                 self.avoid_geom_ids += self.plant_f.GetCollisionGeometriesForBody(self.plant_f.get_body(i))
- 
 
-    def AddPositionConstraint(self, p_WQ_lower, p_WQ_upper, p_LQ = np.zeros(3)):
+        # create mathematical program and add decision variables
+        self.prog = MathematicalProgram()
+        self.q = self.prog.NewContinuousVariables(self.num_points + 2, 
+                self.num_positions,
+                name = "q")
+
+        # add joint limit constraints
+        for row in self.q:
+            self.prog.AddBoundingBoxConstraint(joint_limits['lower'], joint_limits['upper'], row)
+
+        #add initial and final kinematic constraints 
+        self.p_tol = np.ones(3)*p_tol
+        self.theta_tol = theta_tol
+
+        ps_WG = self.start_pose.translation()
+        pg_WG = self.goal_pose.translation()
+        Rs_WG = self.start_pose.rotation()
+        Rg_WG = self.goal_pose.rotation()
+
+        self.AddPositionConstraint(ps_WG - self.p_tol, ps_WG + self.p_tol, 0)
+        self.AddPositionConstraint(pg_WG - self.p_tol, pg_WG + self.p_tol, -1)
+        self.AddOrientationConstraint(Rs_WG, self.theta_tol, 0)
+        self.AddOrientationConstraint(Rg_WG, self.theta_tol, -1)
+
+    
+        #add constraints on intermediate solutions 
+        for i in range(len(self.q) - 1):
+            q_now = self.q[i]
+            q_next = self.q[i+1]
+            self.prog.AddCost((q_next - q_now).dot(q_next - q_now))
+
+    def AddJointCenteringCost(self, q_nominal):
+        for row in self.q:
+            self.prog.AddQuadraticErrorCost(np.identity(len(row)), q_nominal, row)
+        
+
+    def AddPositionConstraint(self, p_WQ_lower, p_WQ_upper, n, p_LQ = np.zeros(3)):
         """ Adds a bounding box constraint on the position of the panda's hand
 
         p_WQ_lower: the lower coordinate of the bounding box in the world frame (np.array (1,3))
@@ -68,15 +122,11 @@ class PandaInverseKinematics:
         p_LQ: an optional offset from the hand frame to the point Q  (np.array (1,3))
         """
         p_WL = lambda q: self.X_WL(q).translation() + p_LQ 
-        self.prog.AddConstraint(p_WL, lb = p_WQ_lower, ub = p_WQ_upper, vars = self.q)
+        self.prog.AddConstraint(p_WL, lb = p_WQ_lower, ub = p_WQ_upper, vars = self.q[n])
 
-    def AddOrientationConstraint(self, R_WD, theta_tol):
+    def AddOrientationConstraint(self, R_WD, theta_tol, n):
         diff = lambda q: [self.AngleBetween(q, R_WD)]
-        self.prog.AddConstraint(diff, lb = [-theta_tol], ub = [theta_tol], vars = self.q)
-
-    def AddMinDistanceConstraint(self, d_min):
-        min_dist = lambda q: [self.MinDistance(q)]
-        self.prog.AddConstraint(min_dist, lb = [d_min], ub = [100], vars = self.q)
+        self.prog.AddConstraint(diff, lb = [-theta_tol], ub = [theta_tol], vars = self.q[n])
 
     def AngleBetween(self, q, R_WD): 
         """ find the relative rotation matrix between the link orientation and the desired orientation"""
@@ -93,16 +143,6 @@ class PandaInverseKinematics:
         theta = np.arccos(0.5*(R_LD.trace() - 1))
         return abs(theta)
 
-    def MinDistance(self, q):
-        self.plant_f.SetPositions(self.context_f, self.model_instance, autoDiffToValueMatrix(q))
-        distances = []
-        for id_arm in self.panda_geom_ids:
-            for id_other in self.avoid_geom_ids:
-                d = self.EvalDistance(self.plant_f, self.context_f, id_arm, id_other, q, self.lower_ind, self.num_positions)
-                distances.append(d)
-        return min(distances)
-        
-
     def X_WL(self, q):
         if q.dtype == float:
             plant = self.plant_f
@@ -113,7 +153,6 @@ class PandaInverseKinematics:
         plant.SetPositions(context, self.model_instance, q)
         return plant.CalcRelativeTransform(context, self.resolve_frame(plant, self.W), self.resolve_frame(plant, self.L))
 
-
                 
     def get_prog(self):
         return self.prog
@@ -121,61 +160,6 @@ class PandaInverseKinematics:
     def get_q(self):
         return self.q
 
-            
-    @staticmethod
-    def CalcDistanceDerivatives(plant, context, frameA, frameB, p_ACa, distance, nhat_BA_W, q, lower_ind, num_positions):
-        Jq_v_BCa_W = plant.CalcJacobianTranslationalVelocity(
-                context, 
-                JacobianWrtVariable.kQDot, 
-                frameA, 
-                p_ACa, 
-                frameB, 
-                plant.world_frame())
-
-        Jq_v_BCa_W = Jq_v_BCa_W[:, lower_ind:lower_ind+num_positions]
-        ddistance_dq = nhat_BA_W.transpose().dot(Jq_v_BCa_W)
-
-        distance_ad = AutoDiffXd(distance,
-                ddistance_dq.dot(autoDiffToGradientMatrix(q)))
-
-        return distance_ad
-        
-
     @staticmethod
     def resolve_frame(plant, F):
         return plant.GetFrameByName(F.name(), F.model_instance())
-
-    def EvalDistance(self, plant, context, geom_id1, geom_id2, q, lower_ind, num_positions):
-        """ finds the distance between the geometries with id geom_id1 and geom_id2 """
-        query_port = plant.get_geometry_query_input_port()
-
-        if(not query_port.HasValue(context)):
-            print('''MinimumDistanceConstraint: 
-                Cannot get a valid geometry::QueryObject. 
-                Either the plant geometry_query_input_port() 
-                is not properly connected to the SceneGraph's 
-                output port, or the plant_context_ is incorrect. 
-                Please refer to AddMultibodyPlantSceneGraph on 
-                connecting MultibodyPlant to SceneGraph.''')
-
-        query_object = query_port.Eval(context)
-        signed_distance_pair = query_object.ComputeSignedDistancePairClosestPoints(geom_id1, geom_id2)
-        inspector = query_object.inspector()
-        frame_A_id = inspector.GetFrameId(signed_distance_pair.id_A)
-        frame_B_id = inspector.GetFrameId(signed_distance_pair.id_B)
-        frameA = plant.GetBodyFromFrameId(frame_A_id).body_frame()
-        frameB = plant.GetBodyFromFrameId(frame_B_id).body_frame()
-        p_ACa = np.array(signed_distance_pair.p_ACa)
-        #print(p_ACa, type(p_ACa))
-        return self.CalcDistanceDerivatives(
-                plant, 
-                context,
-                frameA,
-                frameB,
-                inspector.GetPoseInFrame(signed_distance_pair.id_A).multiply(p_ACa),
-                signed_distance_pair.distance,
-                signed_distance_pair.nhat_BA_W,
-                q,
-                lower_ind,
-                num_positions)
-
