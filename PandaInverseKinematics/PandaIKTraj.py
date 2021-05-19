@@ -6,10 +6,29 @@ from pydrake.all import (
         AutoDiffXd,
         autoDiffToValueMatrix,
         autoDiffToGradientMatrix,
-        JacobianWrtVariable)
+        JacobianWrtVariable,
+        PiecewisePolynomial)
 from pydrake.solvers.mathematicalprogram import MathematicalProgram, Solve
 
 
+class Waypoint:
+
+    def __init__(self, pose, time):
+        self.pose = pose
+        self.time = time
+
+class Trajectory:
+
+    def __init__(self, start_pose):
+        self.waypoints = [Waypoint(start_pose, 0)]
+        self.divisions = []
+
+    def add_waypoint(self, pose, time, N):
+        self.waypoints.append(Waypoint(pose, time))
+        self.divisions.append(N)
+
+    def length(self):
+        return len(self.waypoints)
 
 
 class PandaIKTraj:
@@ -26,13 +45,12 @@ class PandaIKTraj:
             plant, 
             plant_context, 
             model_instance,
-            start_pose, # RigidTransform
-            goal_pose, # RigidTransform
-            num_points,  # the number of intermediate IK solutions
+            trajectory,
             p_tol = 0.01,
             theta_tol = 0.01,
             avoid_names = [], 
-            end_effector = "panda_hand"):
+            end_effector = "panda_hand",
+            q_vel_max = np.array([150.0, 150.0, 150.0, 150.0, 180.0, 180.0, 180.0])*np.pi/180.0):
             
         self.plant_f = plant
         self.context_f = plant_context
@@ -46,9 +64,7 @@ class PandaIKTraj:
         self.L = self.plant_f.GetFrameByName(end_effector)
 
         self.num_positions = plant.num_positions(self.model_instance)
-        self.num_points = num_points 
-        self.start_pose = start_pose
-        self.goal_pose = goal_pose
+        self.trajectory = trajectory
         
 
         # find joint limits
@@ -79,42 +95,106 @@ class PandaIKTraj:
                 self.avoid_geom_ids += self.plant_f.GetCollisionGeometriesForBody(self.plant_f.get_body(i))
 
         # create mathematical program and add decision variables
-        self.prog = MathematicalProgram()
-        self.q = self.prog.NewContinuousVariables(self.num_points + 2, 
-                self.num_positions,
-                name = "q")
-
-        # add joint limit constraints
-        for row in self.q:
-            self.prog.AddBoundingBoxConstraint(joint_limits['lower'], joint_limits['upper'], row)
+        self.progs = []
+        self.qs = []
+        self.times = []
 
         #add initial and final kinematic constraints 
         self.p_tol = np.ones(3)*p_tol
         self.theta_tol = theta_tol
 
-        ps_WG = self.start_pose.translation()
-        pg_WG = self.goal_pose.translation()
-        Rs_WG = self.start_pose.rotation()
-        Rg_WG = self.goal_pose.rotation()
+        for i in range(self.trajectory.length()- 1):
+            self.progs.append(MathematicalProgram())
+            prog = self.progs[-1]
+                    
+            N = self.trajectory.divisions[i]
+            start = self.trajectory.waypoints[i]
+            goal = self.trajectory.waypoints[i+1] 
+            self.qs.append(prog.NewContinuousVariables(N + 2, 
+                self.num_positions,
+                name = "q"))
 
-        self.AddPositionConstraint(ps_WG - self.p_tol, ps_WG + self.p_tol, 0)
-        self.AddPositionConstraint(pg_WG - self.p_tol, pg_WG + self.p_tol, -1)
-        self.AddOrientationConstraint(Rs_WG, self.theta_tol, 0)
-        self.AddOrientationConstraint(Rg_WG, self.theta_tol, -1)
+            q = self.qs[-1]
+
+            # add joint limit constraints
+            for row in q:
+                prog.AddBoundingBoxConstraint(joint_limits['lower'], joint_limits['upper'], row)
+
+
+            ps_WG = start.pose.translation()
+            pg_WG = goal.pose.translation()
+            Rs_WG = start.pose.rotation()
+            Rg_WG = goal.pose.rotation()
+
+
+            self.AddPositionConstraint(prog, q[0], ps_WG - self.p_tol, ps_WG + self.p_tol)
+            self.AddPositionConstraint(prog, q[-1], pg_WG - self.p_tol, pg_WG + self.p_tol)
+            self.AddOrientationConstraint(prog, q[0], Rs_WG, self.theta_tol)
+            self.AddOrientationConstraint(prog, q[-1], Rg_WG, self.theta_tol)
+
+            self.times.append(np.linspace(start.time, goal.time, N + 2))
+
+            if N == 0:
+                continue
+                
+            dt = (goal.time -start.time)/(N+1)
 
     
-        #add constraints on intermediate solutions 
-        for i in range(len(self.q) - 1):
-            q_now = self.q[i]
-            q_next = self.q[i+1]
-            self.prog.AddCost((q_next - q_now).dot(q_next - q_now))
+            #add constraints on intermediate solutions 
+            for j in range(len(q) - 1):
+                q_now = q[j]
+                q_next = q[j+1]
+                # ensure adjacent solutions are near one another
+                prog.AddCost((q_next - q_now).dot(q_next - q_now)) 
+                v1 = (q_next - q_now)/dt
+                # joint velocity limits constraint
+                prog.AddLinearConstraint(v1, lb = -q_vel_max, ub = q_vel_max)
+                if j < (len(q) - 2):
+                    q_next_next = q[j+2]
+                    v2 = (q_next_next- q_next)/dt
+                    prog.AddCost((v2-v1).dot(v2-v1))
+
+
+            self.results = []
+
+    def Solve(self):
+        for i in range(len(self.progs)):
+            prog = self.progs[i]
+            if (i > 0):
+                prev_soln = self.results[-1].GetSolution(self.qs[i-1][-1]) 
+                prog.AddLinearEqualityConstraint(self.qs[i][0], prev_soln)
+                prog.SetInitialGuess(self.qs[i][0], prev_soln)
+            self.results.append(Solve(prog))
+        return self.results 
+
+
+
+    def get_q_traj(self):
+        assert len(self.results) > 0
+        q_list = []
+        for i in range(len(self.results)):
+            if i == 0:
+                t_lst = self.times[i]
+                q_knots = self.results[i].GetSolution(self.qs[i])
+            else:
+                t_lst = np.concatenate((t_lst, self.times[i][1:]))
+                q_knots = np.concatenate((q_knots, self.results[i].GetSolution(self.qs[i])[1:]))
+
+        #print(q_knots)
+        return PiecewisePolynomial.CubicShapePreserving(t_lst, q_knots[:, 0:self.num_positions].T)
+
 
     def AddJointCenteringCost(self, q_nominal):
-        for row in self.q:
-            self.prog.AddQuadraticErrorCost(np.identity(len(row)), q_nominal, row)
+        for i in range(len(self.progs)):
+            prog = self.progs[i]
+            q = self.qs[i]
+            for j in range(len(q)):
+                diff = (q[j] - q_nominal)#[1:] # we don't care about base joint
+                prog.AddCost(diff.dot(diff))
+                        
+                       
         
-
-    def AddPositionConstraint(self, p_WQ_lower, p_WQ_upper, n, p_LQ = np.zeros(3)):
+    def AddPositionConstraint(self, prog, q, p_WQ_lower, p_WQ_upper, p_LQ = np.zeros(3)):
         """ Adds a bounding box constraint on the position of the panda's hand
 
         p_WQ_lower: the lower coordinate of the bounding box in the world frame (np.array (1,3))
@@ -122,11 +202,11 @@ class PandaIKTraj:
         p_LQ: an optional offset from the hand frame to the point Q  (np.array (1,3))
         """
         p_WL = lambda q: self.X_WL(q).translation() + p_LQ 
-        self.prog.AddConstraint(p_WL, lb = p_WQ_lower, ub = p_WQ_upper, vars = self.q[n])
+        prog.AddConstraint(p_WL, lb = p_WQ_lower, ub = p_WQ_upper, vars = q)
 
-    def AddOrientationConstraint(self, R_WD, theta_tol, n):
+    def AddOrientationConstraint(self, prog, q, R_WD, theta_tol):
         diff = lambda q: [self.AngleBetween(q, R_WD)]
-        self.prog.AddConstraint(diff, lb = [-theta_tol], ub = [theta_tol], vars = self.q[n])
+        prog.AddConstraint(diff, lb = [-theta_tol], ub = [theta_tol], vars = q)
 
     def AngleBetween(self, q, R_WD): 
         """ find the relative rotation matrix between the link orientation and the desired orientation"""
