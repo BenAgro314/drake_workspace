@@ -75,6 +75,8 @@ class PandaInverseKinematics:
         self.prog.AddConstraint(diff, lb = [-theta_tol], ub = [theta_tol], vars = self.q)
 
     def AddMinDistanceConstraint(self, d_min):
+        if len(self.avoid_geom_ids) == 0:
+            return
         min_dist = lambda q: [self.MinDistance(q)]
         self.prog.AddConstraint(min_dist, lb = [d_min], ub = [100], vars = self.q)
 
