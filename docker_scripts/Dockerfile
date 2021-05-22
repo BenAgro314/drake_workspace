@@ -12,7 +12,9 @@ RUN apt-get update
 RUN apt-get -y install curl
 RUN apt-get -y install python3-venv
 RUN apt-get -y install ipython
-RUN apt-get -y firefox
+
+RUN apt-get update
+RUN apt-get -y install firefox
 
 #-----------drake-----------------
 
@@ -25,9 +27,14 @@ RUN curl -o drake.tar.gz https://drake-packages.csail.mit.edu/drake/nightly/drak
 RUN mkdir -p /python_venvs/drake_env
 RUN tar -xvzf drake.tar.gz -C /python_venvs/drake_env --strip-components=1
 RUN yes | /python_venvs/drake_env/share/drake/setup/install_prereqs
-WORKDIR /python_venvs
+WORKDIR /python_venvs/
 RUN python3 -m venv drake_env --system-site-packages
 #---------------------------------
+WORKDIR /python_venvs/drake_env
+
+# ompl
+RUN wget https://ompl.kavrakilab.org/install-ompl-ubuntu.sh -O /install-ompl-ubuntu.sh
+RUN bash /install-ompl-ubuntu.sh --python
 
 # utilities 
 RUN apt-get -y install vim
@@ -53,8 +60,6 @@ ENV PASS=$password
 #ENV LC_ALL=en_US.UTF-8.
 
 
-
-
 RUN groupadd -g 1004 agrobenj
 RUN useradd -s /bin/bash -u $id -g $id -m $user && echo "$user:$password" | chpasswd && adduser $user sudo
 
@@ -68,10 +73,11 @@ RUN pip install pandas
 RUN pip install altair
 RUN pip install plotly
 RUN pip install pylint
+RUN pip install black
 RUN git clone https://github.com/Khodeir/furniture.git ~/furniture
 
 RUN echo "source /python_venvs/drake_env/bin/activate" >> ~/.bashrc
-RUN echo "export  $USER=$user"
+RUN echo "export  $USER=$user" >> ~/.bashrc
 #RUN echo "export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8." >> ~/.bashrc
 
 WORKDIR /home/$user/workspace
