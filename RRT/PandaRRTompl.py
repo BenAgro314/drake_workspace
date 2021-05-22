@@ -56,15 +56,55 @@ class PandaRRTompl:
         self.avoid_geom_ids = self.get_avoid_geom_ids() 
 
 
-        self.plan, normalized_costs = self.get_plan()
+        self.plan, normalized_costs = self.get_default_plan()
 
         # make trajectory from results 
         assert goal_time > start_time
         assert len(self.q_nominal) == self.num_positions
         self.times = (goal_time - start_time)*normalized_costs + start_time
 
+    def get_default_plan(self): # using ompl default solver 
+        q_start = self.find_q(self.start_pose)
+        q_goal = self.find_q(self.goal_pose)
+        joint_limits = self.joint_limits()
+        space = ob.RealVectorStateSpace(self.num_positions)
+        bounds = ob.RealVectorBounds(self.num_positions)
+        for i in range(self.num_positions):
+            bounds.setLow(i, joint_limits[i][0])
+            bounds.setHigh(i, joint_limits[i][1])
+        space.setBounds(bounds)
+        ss = og.SimpleSetup(space)
+        ss.setStateValidityChecker(ob.StateValidityCheckerFn(self.isStateValid))
+        start = self.q_to_state(space, q_start)
+        goal = self.q_to_state(space, q_goal)
+        ss.setStartAndGoalStates(start, goal) 
+        solved = ss.solve()
 
-    def get_plan(self):
+        assert solved
+
+        ss.simplifySolution()
+        path = ss.getSolutionPath()
+
+        res = []
+        costs = []
+        for state in path.getStates():
+            q = self.parse_state(state)
+            if len(costs) == 0:
+                costs.append(0)
+            else:
+                d = q - res[-1]
+                cost = np.sqrt(d.dot(d))
+                costs.append(costs[-1] + cost)
+            res.append(q)
+        
+        
+        if (costs[-1] == 0):
+            costs[-1] = 1
+        return np.array(res), np.array(costs)/costs[-1]
+
+
+
+    def get_RRTstar_plan(self):
         """ makes a plan using ompl """
         q_start = self.find_q(self.start_pose)
         q_goal = self.find_q(self.goal_pose)
@@ -103,6 +143,8 @@ class PandaRRTompl:
                 costs.append(costs[-1] + cost)
             res.append(q)
 
+        if (costs[-1] == 0):
+            costs[-1] = 1
         return np.array(res), np.array(costs)/costs[-1]
                 
 
@@ -196,7 +238,7 @@ class PandaRRTompl:
                                          self.panda, self.avoid_names)
         ik.AddPositionConstraint(p_WG - p_tol, p_WG + p_tol)
         ik.AddOrientationConstraint(R_WG, self.theta_tol)
-        ik.AddMinDistanceConstraint(self.p_tol)
+        ik.AddMinDistanceConstraint(0.02)
         prog = ik.get_prog()
         q = ik.get_q()
 
