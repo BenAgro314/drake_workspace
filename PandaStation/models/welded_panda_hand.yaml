@@ -1,0 +1,6 @@
+
+directives:
+
+- add_model:
+    name: panda_hand
+    file: package://panda_station/welded_panda_hand.urdf

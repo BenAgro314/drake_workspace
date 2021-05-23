@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<package>
+  <name>panda_station</name>
+  <version>1.0.0</version>
+  <description>
+    This package contains miscellaneous models for the panda station. Many are sourced from Russ Tedrake's manipulation course.
+  </description>
+  <author email="ben.agro@mail.utoronto.ca">Drake Users</author>
+  <maintainer email="ben.agro@mail.utoronto.ca">Drake Users</maintainer>
+  <license>BSD</license>
+</package>

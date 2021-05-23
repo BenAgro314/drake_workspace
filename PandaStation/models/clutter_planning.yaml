@@ -1,0 +1,8 @@
+
+directives:
+- add_directives:
+    file: package://panda_station/two_bins_w_cameras.yaml
+
+- add_directives:
+    file: package://panda_station/welded_panda_hand.yaml
+

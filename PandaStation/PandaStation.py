@@ -1,7 +1,13 @@
 import pydrake.all
-from .scenarios import AddPanda, AddPandaHand
+from pydrake.all import LoadModelDirectives, ProcessModelDirectives
+from .scenarios import AddPanda, AddPandaHand, AddRgbdSensors
 from .panda_hand_position_controller import PandaHandPositionController, MakeMultibodyStateToPandaHandStateSystem
+from .utils import FindResource, AddPackagePaths
 import numpy as np
+import os
+
+def deg_to_rad(deg):
+    return deg*np.pi/180.0
 
 class PandaStation(pydrake.systems.framework.Diagram):
 
@@ -19,6 +25,7 @@ class PandaStation(pydrake.systems.framework.Diagram):
         self.set_name("panda_station")
         self.object_ids = []
         self.object_poses = []
+        self.camera_info = {} #dictionary in the form name: pose
 
 
     def Finalize(self):
@@ -104,6 +111,10 @@ class PandaStation(pydrake.systems.framework.Diagram):
         self.builder.ExportOutput(hand_mbp_state_to_hand_state.get_output_port(), "hand_state_measured")
         self.builder.ExportOutput(hand_controller.GetOutputPort("grip_force"), "hand_force_measured")
 
+        # add any cameras
+
+        AddRgbdSensors(self.builder, self.plant, self.scene_graph)
+
         # export cheat ports
         self.builder.ExportOutput(self.scene_graph.get_query_output_port(), "geometry_query")
         self.builder.ExportOutput(self.plant.get_contact_results_output_port(), "contact_results")
@@ -160,11 +171,18 @@ class PandaStation(pydrake.systems.framework.Diagram):
 
     def SetupBinStation(self):
         self.setup = "BinStation"
+
+        directive = FindResource("models/two_bins_w_cameras.yaml")
         parser = pydrake.multibody.parsing.Parser(self.plant)
+        AddPackagePaths(parser)
 
-        bin_file = pydrake.common.FindResourceOrThrow(
-                "drake/examples/manipulation_station/models/bin.sdf")
+        # adds bins and cameras
+        ProcessModelDirectives(LoadModelDirectives(directive), self.plant, parser)
 
+        # adds hand and arm
+        self.SetupDefaultStation() 
+
+        '''
         # add first bin
         X_WC = pydrake.math.RigidTransform(
                 pydrake.math.RotationMatrix.MakeZRotation(np.pi/2), [-0.145, -0.63, 0.075])
@@ -177,7 +195,17 @@ class PandaStation(pydrake.systems.framework.Diagram):
         bin2 = parser.AddModelFromFile(bin_file, "bin2")
         self.plant.WeldFrames(self.plant.world_frame(), self.plant.GetFrameByName('bin_base', bin2), X_WC)
 
-        self.SetupDefaultStation() #adds hand and arm
+        # add cameras
+        X_Camera = pydrake.math.RigidTransform(
+                pydrake.math.RollPitchYaw(deg_to_rad(-150), 0, np.pi/2.0).ToRotationMatrix(),
+                [0.3, -0.65, 1])
+        camera = parser.AddModelFromFile(camera_file, "camera")
+        camera = self.plant.GetBodyByName("base", camera)
+        self.camera_info['camera'] = X_Camera
+        self.plant.WeldFrames(self.plant.world_frame(), camera.body_frame(), X_Camera)
+        '''
+
+        # add default hand and arm
 
 
     def AddManipulandFromFile(self, model_file, X_WObject):
@@ -191,3 +219,5 @@ class PandaStation(pydrake.systems.framework.Diagram):
         self.object_ids.append(indices[0])
         self.object_poses.append(X_WObject)
 
+    def get_camera_info(self):
+        return self.camera_info
