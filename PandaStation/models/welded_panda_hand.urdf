@@ -22,6 +22,12 @@
             <box size="0.062 0.20 0.066"/>
         </geometry>
     </collision>
+    <collision>
+        <origin rpy="0 0 0" xyz="0 0 0.033"/>
+        <geometry>
+            <box size="0.062 0.20 0.066"/>
+        </geometry>
+    </collision>
     <!--collision>
       <origin rpy="0 0 0" xyz="0 -0.06 0.015"/>
       <geometry>
@@ -62,6 +68,18 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 0.007 0.045"/>
       <geometry>
+          <box size="0.017 0.014 0.017"/>
+      </geometry>
+    </collision>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 0.015 0.018"/>
+      <geometry>
+          <box size="0.017 0.014 0.036"/>
+      </geometry>
+    </collision>
+    <!--collision>
+      <origin rpy="0 0 0" xyz="0 0.007 0.045"/>
+      <geometry>
         <sphere radius="0.012"/>
       </geometry>
     </collision>
@@ -70,7 +88,7 @@
       <geometry>
         <sphere radius="0.012"/>
       </geometry>
-    </collision>
+    </collision-->
   </link>
   <link name="panda_rightfinger">
     <inertial>
@@ -87,6 +105,18 @@
     <collision>
       <origin rpy="0 0 0" xyz="0 -0.007 0.045"/>
       <geometry>
+          <box size="0.017 0.014 0.017"/>
+      </geometry>
+    </collision>
+    <collision>
+      <origin rpy="0 0 0" xyz="0 -0.015 0.018"/>
+      <geometry>
+          <box size="0.017 0.014 0.036"/>
+      </geometry>
+    </collision>
+    <!--collision>
+      <origin rpy="0 0 0" xyz="0 -0.007 0.045"/>
+      <geometry>
         <sphere radius="0.012"/>
       </geometry>
     </collision>
@@ -95,7 +125,7 @@
       <geometry>
         <sphere radius="0.012"/>
       </geometry>
-    </collision>
+    </collision-->
   </link>
   <!-- the prismatic joints have been changed to fixed joints-->
   <joint name="panda_finger_joint1" type="fixed">

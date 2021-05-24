@@ -132,7 +132,9 @@ def AddPandaHand(plant, panda_model_instance, roll = 0, welded = False):
     #TODO(ben): fix this so it works in general
         gripper = parser.AddModelFromFile(FindResource("models/welded_panda_hand.urdf"))
     else:
-        gripper = parser.AddModelFromFile(pydrake.common.FindResourceOrThrow("drake/manipulation/models/franka_description/urdf/hand.urdf"))
+        gripper = parser.AddModelFromFile(
+                FindResource("models/panda_hand_fixed_collisions.urdf"))
+        #gripper = parser.AddModelFromFile(pydrake.common.FindResourceOrThrow("drake/manipulation/models/franka_description/urdf/hand.urdf"))
 
     X_8G = RigidTransform(RollPitchYaw(0, 0, roll), [0,0,0])
     plant.WeldFrames(plant.GetFrameByName("panda_link8", panda_model_instance), plant.GetFrameByName("panda_hand",gripper), X_8G)

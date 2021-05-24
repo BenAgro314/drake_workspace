@@ -27,6 +27,8 @@ class PandaStation(pydrake.systems.framework.Diagram):
         self.object_poses = []
         self.camera_info = {} #dictionary in the form name: pose
 
+        self.controller_plant = pydrake.multibody.plant.MultibodyPlant(time_step = self.time_step)
+
 
     def Finalize(self):
         """Constructs a PandaStation"""
@@ -60,15 +62,14 @@ class PandaStation(pydrake.systems.framework.Diagram):
         self.builder.ExportOutput(self.plant.get_state_output_port(self.panda), "panda_state_estimated")
 
         # plant for the panda controller
-        controller_plant = pydrake.multibody.plant.MultibodyPlant(time_step = self.time_step)
-        controller_panda = AddPanda(controller_plant)
-        AddPandaHand(controller_plant, controller_panda, welded = True) # welded so the controller doesn't care about the hand joints
-        controller_plant.Finalize()
+        controller_panda = AddPanda(self.controller_plant)
+        AddPandaHand(self.controller_plant, controller_panda, welded = True) # welded so the controller doesn't care about the hand joints
+        self.controller_plant.Finalize()
 
         # add panda controller. TODO(ben): make sure that this controller is realistic
         panda_controller = self.builder.AddSystem(
             pydrake.systems.controllers.InverseDynamicsController(
-                controller_plant,
+                self.controller_plant,
                 kp =[100]*num_panda_positions,
                 ki =[1]*num_panda_positions,
                 kd =[20]*num_panda_positions,
@@ -129,6 +130,9 @@ class PandaStation(pydrake.systems.framework.Diagram):
 
     def get_multibody_plant(self):
         return self.plant
+
+    def get_controller_plant(self):
+        return self.controller_plant
 
     def get_scene_graph(self):
         return self.scene_graph
