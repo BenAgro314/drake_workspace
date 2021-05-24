@@ -97,7 +97,7 @@ class PandaStation(pydrake.systems.framework.Diagram):
                         panda_controller.get_input_port_desired_state())
         self.builder.Connect(panda_position.get_output_port(), desired_state_from_position.get_input_port())
 
-        # TODO(ben): make sure this hand controller is accurate
+        #TODO(ben): make sure this hand controller is accurate
         hand_controller = self.builder.AddSystem(PandaHandPositionController())
         hand_controller.set_name("hand_controller")
         self.builder.Connect(hand_controller.GetOutputPort("generalized_force"),             

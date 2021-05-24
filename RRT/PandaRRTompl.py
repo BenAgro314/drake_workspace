@@ -63,6 +63,7 @@ class PandaRRTompl:
         assert len(self.q_nominal) == self.num_positions
         self.times = (goal_time - start_time)*normalized_costs + start_time
 
+
     def get_default_plan(self): # using ompl default solver 
         q_start = self.find_q(self.start_pose)
         q_goal = self.find_q(self.goal_pose)
