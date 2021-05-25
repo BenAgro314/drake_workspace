@@ -15,7 +15,7 @@ class PandaStation(pydrake.systems.framework.Diagram):
 
         pydrake.systems.framework.Diagram.__init__(self)
 
-        self.time_step = 0.002
+        self.time_step = time_step
 
         self.builder = pydrake.systems.framework.DiagramBuilder()
         self.plant, self.scene_graph = pydrake.multibody.plant.AddMultibodyPlantSceneGraph(

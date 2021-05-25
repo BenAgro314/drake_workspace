@@ -36,7 +36,7 @@ directives:
     X_PF:
       base_frame: world
       rotation: !Rpy { deg: [0.0, 0.0, 0 ]}
-      translation: [1, 1, 0]
+      translation: [0.25, -0.25, 0]
 
 - add_model:
     name: cylinder0

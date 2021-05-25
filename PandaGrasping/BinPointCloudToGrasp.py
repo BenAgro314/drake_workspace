@@ -44,7 +44,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
         # create an internal multibody plant model with just the arm and the bins
         # (ie. what the robot knows)
         builder = DiagramBuilder()
-        station = builder.AddSystem(PandaStation())
+        station = builder.AddSystem(PandaStation(time_step = 0.001))
         station.SetupBinStation()
         self.plant = station.get_multibody_plant()
         self.panda = self.plant.GetModelInstanceByName("panda")
@@ -78,7 +78,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
         self.q_initial = None
 
         # ik params
-        self.avoid_names = ['bin0', 'bin1'] #TODO(ben): implement/test this
+        self.avoid_names = ['bin0', 'bin1', 'cylinder0'] #TODO(ben): implement/test this
         self.q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
         self.p_tol = 0.01*np.ones(3)
         self.theta_tol = 0.01
@@ -213,7 +213,8 @@ class BinPointCloudToGraspSystem(LeafSystem):
         max_pitch=np.pi/3.0
         alpha = np.array([0.5])#, 0.65, 0.35])#, 0.8, 0.2, 1.0, 0.0])
         thetas = (min_pitch + (max_pitch - min_pitch)*alpha)
-        warm_start = self.q_nominal
+        warm_start = np.array([-1.26007738, 0.73961558, -0.52305409, -1.61854487, 
+            0.43427186, 2.23120941, -0.36937004])
         for theta in thetas: 
             #print(f"trying angle {theta}")
             # Rotate the object in the hand by a random rotation (around the normal).
@@ -232,7 +233,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
                 #print("failed ik")
                 continue
 
-            warm_start =  q
+            #warm_start =  q
             
             self.plant.SetPositions(self.plant_context, self.panda, q)
             self.plant.SetPositions(self.plant_context, self.plant.GetModelInstanceByName("hand"), [-0.04, 0.04])
@@ -334,8 +335,8 @@ class BinPointCloudToGraspSystem(LeafSystem):
             q_goal = None
             X_G = None
             #print('looking for candidate grasp')
-            for i in range(100):
-                print(f"point choice number {i+1}")
+            for i in range(1000):
+                print(f"Try number {i+1}", end = "\r")
                 cost, X_G, q_goal = self.generate_grasp_candidate_antipodal(cropped_pcd)
                 if np.isfinite(cost):
                     print("FOUND GRASP")
@@ -347,8 +348,6 @@ class BinPointCloudToGraspSystem(LeafSystem):
            
             # pregrasp pose should be above grasping pose
             self.X_WPre, self.q_Pre = self.pregrasp()
-            print("pick:", self.X_WG)
-            print("prepick:", self.X_WPre)
             self.panda_traj = self.rrt_trajectory(q_start, time, self.q_Pre, time + 10)
             self.hand_traj = self.make_hand_traj(0.08, time, 0.08, time +10)
             self.status = "to_prepick"
