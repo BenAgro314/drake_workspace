@@ -29,3 +29,19 @@ directives:
 - add_weld:
     parent: bin1_origin
     child: bin1::bin_base
+
+
+- add_frame:
+    name: cylinder0_origin
+    X_PF:
+      base_frame: world
+      rotation: !Rpy { deg: [0.0, 0.0, 0 ]}
+      translation: [1, 1, 0]
+
+- add_model:
+    name: cylinder0
+    file: package://panda_station/cylinder.urdf
+
+- add_weld:
+    parent: cylinder0_origin
+    child: cylinder0::base_link

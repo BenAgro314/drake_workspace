@@ -67,9 +67,13 @@ class BinPointCloudToGraspSystem(LeafSystem):
         self.X_WG = None
         self.q_G = None
         self.X_GPre = RigidTransform(RotationMatrix(),
-                [0, 0, -0.08])
+                [0, 0, -0.2])
         self.q_Pre = None
-        self.X_WPlace = None
+
+        rot = RotationMatrix.MakeZRotation(np.pi)
+        rot = rot.multiply(RotationMatrix.MakeXRotation(np.pi))
+        self.X_WPlace = RigidTransform( rot ,[.65, 0.1, 0.29])
+
         self.q_Place = None
         self.q_initial = None
 
@@ -160,7 +164,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
         for pt in cloud.points:
             distances = query_object.ComputeSignedDistanceToPoint(pt, threshold=margin)
             if distances:
-                print('collision with point cloud')
+                #print('collision with point cloud')
                 return np.inf
 
         n_GC = X_GW.rotation().multiply(np.asarray(cloud.normals)[indices,:].T)
@@ -202,15 +206,16 @@ class BinPointCloudToGraspSystem(LeafSystem):
         Gz = z - np.dot(z,Gy)*Gy
         Gx = np.cross(Gy, Gz)
         R_WG = RotationMatrix(np.vstack((Gx, Gy, Gz)).T)
-        p_GS_G = [0, 0.03, 0.105]
+        p_GS_G = [0, 0.029, 0.1]
 
         # Try orientations from the center out
         min_pitch=-np.pi/3.0
         max_pitch=np.pi/3.0
-        alpha = np.array([0.5, 0.65, 0.35, 0.8, 0.2, 1.0, 0.0])
-        thetas = [0]
-        for theta in thetas: #(min_pitch + (max_pitch - min_pitch)*alpha):
-            print(f"trying angle {theta}")
+        alpha = np.array([0.5])#, 0.65, 0.35])#, 0.8, 0.2, 1.0, 0.0])
+        thetas = (min_pitch + (max_pitch - min_pitch)*alpha)
+        warm_start = self.q_nominal
+        for theta in thetas: 
+            #print(f"trying angle {theta}")
             # Rotate the object in the hand by a random rotation (around the normal).
             R_WG2 = R_WG.multiply(RotationMatrix.MakeYRotation(theta))
 
@@ -221,11 +226,13 @@ class BinPointCloudToGraspSystem(LeafSystem):
             X_G = RigidTransform(R_WG2, p_WG)
             
             #ik
-            q = self.find_qV2(X_G)
+            q = self.find_qV2(X_G, warm_start)
 
             if q is None:
-                print("failed ik")
+                #print("failed ik")
                 continue
+
+            warm_start =  q
             
             self.plant.SetPositions(self.plant_context, self.panda, q)
             self.plant.SetPositions(self.plant_context, self.plant.GetModelInstanceByName("hand"), [-0.04, 0.04])
@@ -236,8 +243,8 @@ class BinPointCloudToGraspSystem(LeafSystem):
 
         return np.inf, None, None
 
-    def find_qV2(self, X_G):
-        s = time.time() 
+    def find_qV2(self, X_G, warm_start =np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
+        #s = time.time() 
         ik = InverseKinematics(self.plant, self.plant_context)
         ik.AddPositionConstraint(
                 self.plant.GetFrameByName("panda_hand"),
@@ -256,11 +263,12 @@ class BinPointCloudToGraspSystem(LeafSystem):
         prog = ik.prog()
         q_nom = np.concatenate((self.q_nominal, np.zeros(2)))
         prog.AddQuadraticErrorCost(np.identity(len(q)), q_nom, q)
-        prog.SetInitialGuess(q, q_nom)
+        q_warm = np.concatenate((warm_start, np.zeros(2)))
+        prog.SetInitialGuess(q, q_warm)
 
         result = Solve(prog)
 
-        print(f"ik duration: {time.time() - s}")
+        #print(f"ik duration: {time.time() - s}")
 
         if not result.is_success():
             return None
@@ -272,7 +280,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
         """ finds the joint positions q given a desired gripper end effector 
         position in the world frame X_G
         """
-        s = time.time() 
+        #s = time.time() 
         ik = PandaInverseKinematics(
                 self.plant, 
                 self.plant_context, 
@@ -291,7 +299,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
 
         result = Solve(prog)
 
-        print(f"ik duration: {time.time() - s}")
+        #print(f"ik duration: {time.time() - s}")
 
         if not result.is_success():
             return None
@@ -314,22 +322,23 @@ class BinPointCloudToGraspSystem(LeafSystem):
         time = context.get_time()
 
         if self.status == "initialization":
-
+            print("INITIALIZATION")
             cropped_pcd = self.process_bin_point_cloud(context)
 
             q_start = self.EvalVectorInput(context, 
                     self.panda_position_input_port.get_index()).get_value()
-            self.q_initial = q_start
+
+            self.q_initial = np.copy(q_start)
 
             cost = np.inf
             q_goal = None
             X_G = None
-            print('looking for candidate grasp')
+            #print('looking for candidate grasp')
             for i in range(100):
                 print(f"point choice number {i+1}")
                 cost, X_G, q_goal = self.generate_grasp_candidate_antipodal(cropped_pcd)
                 if np.isfinite(cost):
-                    print("found grasp")
+                    print("FOUND GRASP")
                     self.X_WG = X_G
                     self.q_G = q_goal
                     break
@@ -343,6 +352,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
             self.panda_traj = self.rrt_trajectory(q_start, time, self.q_Pre, time + 10)
             self.hand_traj = self.make_hand_traj(0.08, time, 0.08, time +10)
             self.status = "to_prepick"
+            print("TO PREPICK")
 
         if self.status == "to_prepick":
             if (time <= self.panda_traj.end_time()):
@@ -353,36 +363,34 @@ class BinPointCloudToGraspSystem(LeafSystem):
                 q_start = self.EvalVectorInput(context, 
                         self.panda_position_input_port.get_index()).get_value()
                 self.make_pick_traj(q_start, time)
+                print("PICKING")
 
         if self.status == "picking":
             if (time <= self.panda_traj.end_time()):
                 q_command = self.panda_traj.value(time).flatten()
                 output.set_value(q_command)
             else:
+                X_WPreplace, q_Preplace = self.preplace()
                 q_start = self.EvalVectorInput(context, 
                         self.panda_position_input_port.get_index()).get_value()
-                rot = RotationMatrix.MakeZRotation(np.pi)
-                rot = rot.multiply(RotationMatrix.MakeXRotation(np.pi))
-                self.X_WPlace = RigidTransform( rot ,[.65, 0.1, 0.29])
-                assert self.X_WPlace is not None
                 self.q_Place  = self.find_qV2(self.X_WPlace)
                 assert self.q_Place is not None
                 self.panda_traj = self.rrt_trajectory(q_start, 
-                        time, self.q_Place, time+10)
+                        time, q_Preplace, time+10)
                 self.hand_traj = self.make_hand_traj(0, time, 0, time+10)
-                self.status = "to_place"
+                self.status = "to_preplace"
+                print("TO PREPLACE")
 
-        if self.status == "to_place":
+        if self.status == "to_preplace":
             if (time <= self.panda_traj.end_time()):
                 q_command = self.panda_traj.value(time).flatten()
                 output.set_value(q_command)
             else:
                 q_start = self.EvalVectorInput(context, 
                         self.panda_position_input_port.get_index()).get_value()
-                self.panda_traj = self.make_hold_traj(q_start, time, time+2) 
-                self.hand_traj = self.make_hand_traj(0, time, 0.08, time+2)
+                self.make_place_traj(q_start, time)
                 self.status = "placing"
-
+                print("PLACING")
 
         if self.status == "placing":
             if (time <= self.panda_traj.end_time()):
@@ -394,8 +402,9 @@ class BinPointCloudToGraspSystem(LeafSystem):
 
                 self.panda_traj = self.rrt_trajectory(q_start, time, 
                         self.q_initial, time + 4)
-                self.hand_traj = self.make_hand_traj(0.08, time, 0.08, time+4)
+                self.hand_traj = self.make_hand_traj(0.08, time, 0.08, time+2)
                 self.status = "to_rest"
+                print("TO REST")
 
         if self.status == "to_rest":
             if (time <= self.panda_traj.end_time()):
@@ -404,6 +413,23 @@ class BinPointCloudToGraspSystem(LeafSystem):
             else:
                 q_command = self.q_initial
                 output.set_value(q_command)
+
+    def make_place_traj(self, q_start, time):
+        # hand moving downwards
+        self.panda_traj = self.rrt_trajectory(q_start, time, self.q_Place, time + 2)
+        self.hand_traj = self.make_hand_traj(0.0, time, 0.0, time+2)
+
+        # hand holding while the gripper is opening
+        traj_hold = self.make_hold_traj(self.q_Place, time+2, time+4)
+        self.panda_traj.ConcatenateInTime(traj_hold)
+        hand_open = self.make_hand_traj(0.0, time+2, 0.08, time+4)
+        self.hand_traj.ConcatenateInTime(hand_open)
+
+        # hand raising upwards
+        traj_up = self.rrt_trajectory(self.q_Place, time+4, q_start, time+6)
+        self.panda_traj.ConcatenateInTime(traj_up)
+        hand_opened = self.make_hand_traj(0.08, time+4, 0.08, time+6)
+        self.hand_traj.ConcatenateInTime(hand_opened)
 
     def make_pick_traj(self, q_start, time):
         # hand moving downwards
@@ -431,9 +457,16 @@ class BinPointCloudToGraspSystem(LeafSystem):
         qs = np.array([to_hold, to_hold])
         return PiecewisePolynomial.ZeroOrderHold(time, qs.T)
 
+    def preplace(self):
+        X_WPre= self.X_WPlace.multiply(self.X_GPre)
+        q_Pre = self.find_qV2(X_WPre)
+        assert q_Pre is not None, "invalid pregrasp pose"
+        return X_WPre, q_Pre
+
     def pregrasp(self):
         X_WPre = self.X_WG.multiply(self.X_GPre)
         q_Pre = self.find_qV2(X_WPre)
+        assert q_Pre is not None, "invalid pregrasp pose"
         return X_WPre, q_Pre
 
     def make_hand_traj(self, q_start, start_time, q_end, end_time):

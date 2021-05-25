@@ -138,4 +138,9 @@
     <child link="panda_rightfinger"/>
     <origin rpy="0 0 0" xyz="0 -0.04 0.0584"/>
   </joint>
+  <drake:collision_filter_group name="group_left_right">
+    <drake:member link="panda_leftfinger"/>
+    <drake:member link="panda_rightfinger"/>
+    <drake:ignored_collision_filter_group name="group_left_right"/>
+  </drake:collision_filter_group>
 </robot>
