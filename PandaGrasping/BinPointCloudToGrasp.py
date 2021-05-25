@@ -1,20 +1,17 @@
 import numpy as np
 import open3d as o3d
-
+import time
 from ompl import base as ob
 from ompl import geometric as og
-
 from PandaStation import (
     PandaStation, FindResource, AddPackagePaths, AddRgbdSensors, 
     draw_points, draw_open3d_point_cloud, create_open3d_point_cloud) 
-
 from PandaInverseKinematics import PandaInverseKinematics
-
 from pydrake.all import (
         AbstractValue, LeafSystem, Isometry3, AngleAxis, RigidTransform,
-        DiagramBuilder, RotationMatrix, Solve, BasicVector, PiecewisePolynomial
+        DiagramBuilder, RotationMatrix, Solve, BasicVector, PiecewisePolynomial,
+        InverseKinematics
         )
-
 import pydrake.perception as mut
 
 class BinPointCloudToGraspSystem(LeafSystem):
@@ -72,6 +69,9 @@ class BinPointCloudToGraspSystem(LeafSystem):
         self.X_GPre = RigidTransform(RotationMatrix(),
                 [0, 0, -0.08])
         self.q_Pre = None
+        self.X_WPlace = None
+        self.q_Place = None
+        self.q_initial = None
 
         # ik params
         self.avoid_names = ['bin0', 'bin1'] #TODO(ben): implement/test this
@@ -202,7 +202,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
         Gz = z - np.dot(z,Gy)*Gy
         Gx = np.cross(Gy, Gz)
         R_WG = RotationMatrix(np.vstack((Gx, Gy, Gz)).T)
-        p_GS_G = [0, 0.035, 0.11]
+        p_GS_G = [0, 0.03, 0.105]
 
         # Try orientations from the center out
         min_pitch=-np.pi/3.0
@@ -221,9 +221,10 @@ class BinPointCloudToGraspSystem(LeafSystem):
             X_G = RigidTransform(R_WG2, p_WG)
             
             #ik
-            q = self.find_q(X_G)
+            q = self.find_qV2(X_G)
 
             if q is None:
+                print("failed ik")
                 continue
             
             self.plant.SetPositions(self.plant_context, self.panda, q)
@@ -235,11 +236,43 @@ class BinPointCloudToGraspSystem(LeafSystem):
 
         return np.inf, None, None
 
+    def find_qV2(self, X_G):
+        s = time.time() 
+        ik = InverseKinematics(self.plant, self.plant_context)
+        ik.AddPositionConstraint(
+                self.plant.GetFrameByName("panda_hand"),
+                np.zeros(3),
+                self.plant.world_frame(),
+                X_G.translation() - self.p_tol,
+                X_G.translation() + self.p_tol)
+        ik.AddOrientationConstraint(
+                self.plant.GetFrameByName("panda_hand"),
+                RotationMatrix(),
+                self.plant.world_frame(),
+                X_G.rotation(),
+                self.theta_tol)
+        ik.AddMinimumDistanceConstraint(0.01, 0.1)
+        q = ik.q()
+        prog = ik.prog()
+        q_nom = np.concatenate((self.q_nominal, np.zeros(2)))
+        prog.AddQuadraticErrorCost(np.identity(len(q)), q_nom, q)
+        prog.SetInitialGuess(q, q_nom)
+
+        result = Solve(prog)
+
+        print(f"ik duration: {time.time() - s}")
+
+        if not result.is_success():
+            return None
+
+
+        return result.GetSolution(q)[:-2]
+    
     def find_q(self, X_G):
         """ finds the joint positions q given a desired gripper end effector 
         position in the world frame X_G
         """
-
+        s = time.time() 
         ik = PandaInverseKinematics(
                 self.plant, 
                 self.plant_context, 
@@ -258,8 +291,11 @@ class BinPointCloudToGraspSystem(LeafSystem):
 
         result = Solve(prog)
 
+        print(f"ik duration: {time.time() - s}")
+
         if not result.is_success():
             return None
+
 
         return result.GetSolution(q)
 
@@ -283,6 +319,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
 
             q_start = self.EvalVectorInput(context, 
                     self.panda_position_input_port.get_index()).get_value()
+            self.q_initial = q_start
 
             cost = np.inf
             q_goal = None
@@ -315,34 +352,88 @@ class BinPointCloudToGraspSystem(LeafSystem):
                 self.status = "picking"
                 q_start = self.EvalVectorInput(context, 
                         self.panda_position_input_port.get_index()).get_value()
-
-                self.panda_traj = self.rrt_trajectory(q_start, time, self.q_G, time + 2)
-                traj_up = self.rrt_trajectory(self.q_G, time+2, q_start, time + 4)
-                self.panda_traj.ConcatenateInTime(traj_up)
-
-                self.hand_traj = self.make_hand_traj(0.08, time, 0, time + 2).ConcatenateInTime(self.make_hand_traj(0, time+2, 0, time+4))
-                        
+                self.make_pick_traj(q_start, time)
 
         if self.status == "picking":
             if (time <= self.panda_traj.end_time()):
                 q_command = self.panda_traj.value(time).flatten()
                 output.set_value(q_command)
             else:
-                q_command = np.zeros(7)
+                q_start = self.EvalVectorInput(context, 
+                        self.panda_position_input_port.get_index()).get_value()
+                rot = RotationMatrix.MakeZRotation(np.pi)
+                rot = rot.multiply(RotationMatrix.MakeXRotation(np.pi))
+                self.X_WPlace = RigidTransform( rot ,[.65, 0.1, 0.29])
+                assert self.X_WPlace is not None
+                self.q_Place  = self.find_qV2(self.X_WPlace)
+                assert self.q_Place is not None
+                self.panda_traj = self.rrt_trajectory(q_start, 
+                        time, self.q_Place, time+10)
+                self.hand_traj = self.make_hand_traj(0, time, 0, time+10)
+                self.status = "to_place"
+
+        if self.status == "to_place":
+            if (time <= self.panda_traj.end_time()):
+                q_command = self.panda_traj.value(time).flatten()
+                output.set_value(q_command)
+            else:
+                q_start = self.EvalVectorInput(context, 
+                        self.panda_position_input_port.get_index()).get_value()
+                self.panda_traj = self.make_hold_traj(q_start, time, time+2) 
+                self.hand_traj = self.make_hand_traj(0, time, 0.08, time+2)
+                self.status = "placing"
+
+
+        if self.status == "placing":
+            if (time <= self.panda_traj.end_time()):
+                q_command = self.panda_traj.value(time).flatten()
+                output.set_value(q_command)
+            else:
+                q_start = self.EvalVectorInput(context, 
+                        self.panda_position_input_port.get_index()).get_value()
+
+                self.panda_traj = self.rrt_trajectory(q_start, time, 
+                        self.q_initial, time + 4)
+                self.hand_traj = self.make_hand_traj(0.08, time, 0.08, time+4)
+                self.status = "to_rest"
+
+        if self.status == "to_rest":
+            if (time <= self.panda_traj.end_time()):
+                q_command = self.panda_traj.value(time).flatten()
+                output.set_value(q_command)
+            else:
+                q_command = self.q_initial
                 output.set_value(q_command)
 
-        elif self.status == "to_place":
-            pass
+    def make_pick_traj(self, q_start, time):
+        # hand moving downwards
+        self.panda_traj = self.rrt_trajectory(q_start, time, self.q_G, time + 2)
+        self.hand_traj = self.make_hand_traj(0.08, time, 0.08, time+2)
 
-        elif self.status == "placing":
-            pass
+        # hand holding while the gripper is closing
+        traj_hold = self.make_hold_traj(self.q_G, time+2, time+4)
+        self.panda_traj.ConcatenateInTime(traj_hold)
+        hand_close = self.make_hand_traj(0.08, time+2, 0, time+4)
+        self.hand_traj.ConcatenateInTime(hand_close)
 
-        else: # elif self.status == "to_rest"
-            pass
+        # hand raising upwards
+        traj_up = self.rrt_trajectory(self.q_G, time+4, q_start, time+6)
+        self.panda_traj.ConcatenateInTime(traj_up)
+        hand_closed = self.make_hand_traj(0, time+4, 0, time+6)
+        self.hand_traj.ConcatenateInTime(hand_closed)
+    
+    @staticmethod
+    def make_hold_traj(to_hold, start_time, end_time):
+        """ make a trajectory that holds the position to_hold from star_time
+        to end_time
+        """
+        time = np.array([start_time, end_time])
+        qs = np.array([to_hold, to_hold])
+        return PiecewisePolynomial.ZeroOrderHold(time, qs.T)
 
     def pregrasp(self):
         X_WPre = self.X_WG.multiply(self.X_GPre)
-        q_Pre = self.find_q(X_WPre)
+        q_Pre = self.find_qV2(X_WPre)
         return X_WPre, q_Pre
 
     def make_hand_traj(self, q_start, start_time, q_end, end_time):
