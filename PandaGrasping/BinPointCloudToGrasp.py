@@ -1,6 +1,9 @@
 import numpy as np
 import open3d as o3d
 
+from ompl import base as ob
+from ompl import geometric as og
+
 from PandaStation import (
     PandaStation, FindResource, AddPackagePaths, AddRgbdSensors, 
     draw_points, draw_open3d_point_cloud, create_open3d_point_cloud) 
@@ -9,7 +12,8 @@ from PandaInverseKinematics import PandaInverseKinematics
 
 from pydrake.all import (
         AbstractValue, LeafSystem, Isometry3, AngleAxis, RigidTransform,
-        DiagramBuilder, RotationMatrix)
+        DiagramBuilder, RotationMatrix, Solve, BasicVector, PiecewisePolynomial
+        )
 
 import pydrake.perception as mut
 
@@ -17,6 +21,8 @@ class BinPointCloudToGraspSystem(LeafSystem):
 
     def __init__(self):
         LeafSystem.__init__(self)
+
+        self.nq = 7
 
         camera0_pcd = self.DeclareAbstractInputPort(
                 "camera0_pcd", AbstractValue.Make(mut.PointCloud()))
@@ -28,6 +34,15 @@ class BinPointCloudToGraspSystem(LeafSystem):
                 'camera0': camera0_pcd, 
                 'camera1': camera1_pcd, 
                 'camera2': camera2_pcd}
+
+        self.panda_position_input_port = self.DeclareVectorInputPort("panda_position", 
+                BasicVector(self.nq))
+        self.panda_position_command_output_port = self.DeclareVectorOutputPort(
+                "panda_position_command", BasicVector(self.nq),
+                self.DoCalcOutput)
+        self.hand_command_output_port = self.DeclareVectorOutputPort(
+                "hand_position_command", BasicVector(1),
+                self.CalcHandOutput)
 
         # create an internal multibody plant model with just the arm and the bins
         # (ie. what the robot knows)
@@ -42,10 +57,41 @@ class BinPointCloudToGraspSystem(LeafSystem):
         self.scene_graph = station.get_scene_graph()
         self.scene_graph_context = station.GetSubsystemContext(self.scene_graph, 
                 self.station_context)
+        self.query_output_port = self.scene_graph.GetOutputPort("query")
 
-        self.DeclareAbstractOutputPort("X_WG", lambda: AbstractValue.Make(RigidTransform()),
-                self.DoCalcOutput)
+        #self.DeclareAbstractOutputPort("X_WG", lambda: AbstractValue.Make(RigidTransform()),
+         #       self.DoCalcOutput)
 
+        self.rng = np.random.default_rng()
+
+
+        # these store the end effector pose and arm joint positions for the 
+        # goal grasping pose
+        self.X_WG = None
+        self.q_G = None
+        self.X_GPre = RigidTransform(RotationMatrix(),
+                [0, 0, -0.08])
+        self.q_Pre = None
+
+        # ik params
+        self.avoid_names = ['bin0', 'bin1'] #TODO(ben): implement/test this
+        self.q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
+        self.p_tol = 0.01*np.ones(3)
+        self.theta_tol = 0.01
+
+        self.avoid_geom_ids = self.get_avoid_geom_ids() 
+        '''
+        the below can be one of:
+            - initialization: before finding the first gripper pose
+            - to_prepick: moving to the prepick position
+            - picking: picking up the manipuland
+            - to_place: placing the manipuland
+            - placing:
+            - to_rest: move to initial position, and then back to initialization
+        '''
+        self.status = "initialization" 
+        self.panda_traj = None
+        self.hand_traj = None
 
     def process_bin_point_cloud(self, context):
 
@@ -103,19 +149,18 @@ class BinPointCloudToGraspSystem(LeafSystem):
 
         query_object = self.scene_graph.get_query_output_port().Eval(
                 self.scene_graph_context)
-        collision_pairs = query_object.ComputePointPairPenetration()
         
         # check collisions with objects in the world 
-        if query_object.HasCollisions():
+        #if query_object.HasCollisions():
             #print('collision with world')
-            return np.inf
+            #return np.inf
 
         # Check collisions between the gripper and the point cloud
         margin = 0.0  # must be smaller than the margin used in the point cloud preprocessing.
         for pt in cloud.points:
             distances = query_object.ComputeSignedDistanceToPoint(pt, threshold=margin)
             if distances:
-                #print('collision with point cloud')
+                print('collision with point cloud')
                 return np.inf
 
         n_GC = X_GW.rotation().multiply(np.asarray(cloud.normals)[indices,:].T)
@@ -130,21 +175,21 @@ class BinPointCloudToGraspSystem(LeafSystem):
         return cost
 
 
-    def generate_grasp_candidate_antipodal(cloud, rng, avoid_names = []):
+    def generate_grasp_candidate_antipodal(self, cloud):
         """
         Picks a random point in the cloud, and aligns the robot finger with the normal of that pixel. 
         The rotation around the normal axis is drawn from a uniform distribution over [min_roll, max_roll].
         """
         body = self.plant.GetBodyByName("panda_hand")
 
-        index = rng.integers(0,len(cloud.points)-1)
+        index = self.rng.integers(0,len(cloud.points)-1)
 
         # Use S for sample point/frame.
         p_WS = np.asarray(cloud.points[index])
         n_WS = np.asarray(cloud.normals[index])
 
         if not np.isclose(np.linalg.norm(n_WS), 1.0):
-            return np.inf, None
+            return np.inf, None, None
 
         Gy = n_WS # gripper y axis aligns with normal
         # make orthonormal z axis, aligned with world down
@@ -152,7 +197,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
         if np.abs(np.dot(z,Gy)) < 1e-6:
             # normal was pointing straight down.  reject this sample.
             #print('here')
-            return np.inf, None
+            return np.inf, None, None
 
         Gz = z - np.dot(z,Gy)*Gy
         Gx = np.cross(Gy, Gz)
@@ -163,8 +208,9 @@ class BinPointCloudToGraspSystem(LeafSystem):
         min_pitch=-np.pi/3.0
         max_pitch=np.pi/3.0
         alpha = np.array([0.5, 0.65, 0.35, 0.8, 0.2, 1.0, 0.0])
-        #thetas = [0]
-        for theta in (min_pitch + (max_pitch - min_pitch)*alpha):
+        thetas = [0]
+        for theta in thetas: #(min_pitch + (max_pitch - min_pitch)*alpha):
+            print(f"trying angle {theta}")
             # Rotate the object in the hand by a random rotation (around the normal).
             R_WG2 = R_WG.multiply(RotationMatrix.MakeYRotation(theta))
 
@@ -173,37 +219,242 @@ class BinPointCloudToGraspSystem(LeafSystem):
             p_WG = p_WS + p_SG_W 
 
             X_G = RigidTransform(R_WG2, p_WG)
-            ik = PandaInverseKinematics(self.plant, self.plant_context, self.panda, avoid_names = avoid_names)
-            p_WQ = X_G.translation()
-            tol = np.ones(3)*0.01
-            q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]) 
-            ik.AddPositionConstraint(p_WQ+tol, p_WQ+tol)
-            ik.AddOrientationConstraint(X_G.rotation(), 0.01)
-            #ik.AddMinDistanceConstraint(0.01)
-            prog = ik.get_prog()
-            q = ik.get_q()
-            prog.AddQuadraticErrorCost(np.identity(len(q)), q_nominal, q)
-            prog.SetInitialGuess(q, q_nominal)
-            result = Solve(prog)
+            
+            #ik
+            q = self.find_q(X_G)
 
-            if not result.is_success():
+            if q is None:
                 continue
             
-            q = result.GetSolution(q)
-            self.plant.SetPositions(plant_context, panda, q)
-            self.plant.SetPositions(plant_context, plant.GetModelInstanceByName("hand"), [-0.04, 0.04])
-            #print('evaluating cost')
-            #print(X_G)
-            cost = grasp_candidate_cost(X_G, plant_context, cloud, plant, scene_graph, scene_graph_context)
-            #X_G = plant.GetFreeBodyPose(plant_context, body)
+            self.plant.SetPositions(self.plant_context, self.panda, q)
+            self.plant.SetPositions(self.plant_context, self.plant.GetModelInstanceByName("hand"), [-0.04, 0.04])
+
+            cost = self.grasp_candidate_cost(X_G, cloud)
             if np.isfinite(cost):
-                return cost, X_G
+                return cost, X_G, q
 
-            #draw_grasp_candidate(q)
+        return np.inf, None, None
 
-        return np.inf, None
+    def find_q(self, X_G):
+        """ finds the joint positions q given a desired gripper end effector 
+        position in the world frame X_G
+        """
+
+        ik = PandaInverseKinematics(
+                self.plant, 
+                self.plant_context, 
+                self.panda, 
+                avoid_names = self.avoid_names)
+
+        p_WQ = X_G.translation()
+        ik.AddPositionConstraint(p_WQ+self.p_tol, p_WQ+self.p_tol)
+        ik.AddOrientationConstraint(X_G.rotation(), self.theta_tol)
+        ik.AddMinDistanceConstraint(0.01)
+
+        prog = ik.get_prog()
+        q = ik.get_q()
+        prog.AddQuadraticErrorCost(np.identity(len(q)), self.q_nominal, q)
+        prog.SetInitialGuess(q, self.q_nominal)
+
+        result = Solve(prog)
+
+        if not result.is_success():
+            return None
+
+        return result.GetSolution(q)
+
+    def CalcHandOutput(self, context, output):
+        time = context.get_time()
+        if (self.hand_traj is None) or (time > self.hand_traj.end_time()):
+            # by default keep hand closed
+            output.set_value([0])
+        else:
+            q_command = self.hand_traj.value(time).flatten()
+            output.set_value(q_command)
+
 
     def DoCalcOutput(self, context, output):
-        print("here: ", context.get_time())
-        cropped_pcd = self.process_bin_point_cloud(context)
-        output.SetFrom(AbstractValue.Make(RigidTransform()))
+
+        time = context.get_time()
+
+        if self.status == "initialization":
+
+            cropped_pcd = self.process_bin_point_cloud(context)
+
+            q_start = self.EvalVectorInput(context, 
+                    self.panda_position_input_port.get_index()).get_value()
+
+            cost = np.inf
+            q_goal = None
+            X_G = None
+            print('looking for candidate grasp')
+            for i in range(100):
+                print(f"point choice number {i+1}")
+                cost, X_G, q_goal = self.generate_grasp_candidate_antipodal(cropped_pcd)
+                if np.isfinite(cost):
+                    print("found grasp")
+                    self.X_WG = X_G
+                    self.q_G = q_goal
+                    break
+                
+            assert np.isfinite(cost), "could not find valid grasp pose"
+           
+            # pregrasp pose should be above grasping pose
+            self.X_WPre, self.q_Pre = self.pregrasp()
+            print("pick:", self.X_WG)
+            print("prepick:", self.X_WPre)
+            self.panda_traj = self.rrt_trajectory(q_start, time, self.q_Pre, time + 10)
+            self.hand_traj = self.make_hand_traj(0.08, time, 0.08, time +10)
+            self.status = "to_prepick"
+
+        if self.status == "to_prepick":
+            if (time <= self.panda_traj.end_time()):
+                q_command = self.panda_traj.value(time).flatten()
+                output.set_value(q_command)
+            else:
+                self.status = "picking"
+                q_start = self.EvalVectorInput(context, 
+                        self.panda_position_input_port.get_index()).get_value()
+
+                self.panda_traj = self.rrt_trajectory(q_start, time, self.q_G, time + 2)
+                traj_up = self.rrt_trajectory(self.q_G, time+2, q_start, time + 4)
+                self.panda_traj.ConcatenateInTime(traj_up)
+
+                self.hand_traj = self.make_hand_traj(0.08, time, 0, time + 2).ConcatenateInTime(self.make_hand_traj(0, time+2, 0, time+4))
+                        
+
+        if self.status == "picking":
+            if (time <= self.panda_traj.end_time()):
+                q_command = self.panda_traj.value(time).flatten()
+                output.set_value(q_command)
+            else:
+                q_command = np.zeros(7)
+                output.set_value(q_command)
+
+        elif self.status == "to_place":
+            pass
+
+        elif self.status == "placing":
+            pass
+
+        else: # elif self.status == "to_rest"
+            pass
+
+    def pregrasp(self):
+        X_WPre = self.X_WG.multiply(self.X_GPre)
+        q_Pre = self.find_q(X_WPre)
+        return X_WPre, q_Pre
+
+    def make_hand_traj(self, q_start, start_time, q_end, end_time):
+        # these input q's are floats not lists
+        time = np.array([start_time, end_time])
+        qs = np.array([[q_start], [q_end]])
+        return PiecewisePolynomial.FirstOrderHold(time, qs.T)
+
+    #----------------- RRT -----------------------------------
+
+    def rrt_trajectory(self, q_start, start_time, q_goal, goal_time):
+
+        joint_limits = self.joint_limits() 
+
+        space = ob.RealVectorStateSpace(self.nq)
+        bounds = ob.RealVectorBounds(self.nq)
+
+        for i in range(self.nq):
+            bounds.setLow(i, joint_limits[i][0])
+            bounds.setHigh(i, joint_limits[i][1])
+
+        space.setBounds(bounds)
+        ss = og.SimpleSetup(space)
+        ss.setStateValidityChecker(ob.StateValidityCheckerFn(self.isStateValid))
+        start = self.q_to_state(space, q_start)
+        goal = self.q_to_state(space, q_goal)
+        ss.setStartAndGoalStates(start, goal) 
+        solved = ss.solve()
+
+        assert solved
+
+        ss.simplifySolution()
+        path = ss.getSolutionPath()
+
+        res = []
+        costs = []
+        for state in path.getStates():
+            q = self.parse_state(state)
+            if len(costs) == 0:
+                costs.append(0)
+            else:
+                d = q - res[-1]
+                cost = np.sqrt(d.dot(d))
+                costs.append(costs[-1] + cost)
+            res.append(q)
+        
+        
+        if (costs[-1] == 0):
+            costs[-1] = 1
+
+        qs = np.array(res)
+        times = start_time + ((goal_time - start_time)*np.array(costs)/costs[-1])
+
+        if len(qs) < 3:
+            return PiecewisePolynomial.FirstOrderHold(times, 
+                    qs[:, 0:self.nq].T)
+        
+        return PiecewisePolynomial.CubicShapePreserving(times,
+                qs[:, 0:self.nq].T)
+        
+
+    def joint_limits(self):
+        joint_inds = self.plant.GetJointIndices(self.panda)[:self.nq]
+        joint_limits = []
+        for i in joint_inds:
+            joint = self.plant.get_joint(i)
+            joint_limits.append((joint.position_lower_limits()[0],
+                                 joint.position_upper_limits()[0]))
+        return joint_limits
+
+    def isStateValid(self, state):
+        """ wrapper around is_colliding that is passed into ompl"""
+        # parse state into q
+        q = self.parse_state(state)
+        # the state is valid if there are no collisions
+        return not self.is_colliding(q)
+
+    def is_colliding(self, q):
+        """ returns True if the configuration q results in a collision,
+        False otherwise
+        """
+        # forwards kinematics (setting the position of the panda)
+        self.plant.SetPositions(self.plant_context, self.panda, q)
+        query_object = self.query_output_port.Eval(self.scene_graph_context)
+        collision_pairs = query_object.ComputePointPairPenetration()
+
+        for pair in collision_pairs:
+            if pair.id_A in self.avoid_geom_ids or pair.id_B in self.avoid_geom_ids:
+                return True
+
+        return False
+
+    def parse_state(self, state):
+        """ parses ompl RealVectorStateSpace::StateType into a numpy array"""
+        q = []
+        for i in range(self.nq):
+            q.append(state[i])
+        return np.array(q)
+
+    def q_to_state(self, space, q):
+        """ turns a python list q into an ompl state"""
+        state = ob.State(space)
+        for i in range(len(q)):
+            state[i] = q[i]
+        return state
+
+    def get_avoid_geom_ids(self):
+
+        avoid_geom_ids = []
+        for name in self.avoid_names:
+            bodies = self.plant.GetBodyIndices(self.plant.GetModelInstanceByName(name))
+            for i in bodies:
+                avoid_geom_ids += self.plant.GetCollisionGeometriesForBody(self.plant.get_body(i))
+        return avoid_geom_ids
+

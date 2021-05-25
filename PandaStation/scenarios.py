@@ -93,6 +93,37 @@ def AddRgbdSensors(builder, plant, scene_graph ,
                 builder.ExportOutput(to_point_cloud.point_cloud_output_port(),
                                      f"{model_name}_point_cloud")
 
+def AddPandaArmHand(plant, q0 = [0.0, 0.1, 0, -1.2, 0, 1.6, 0], 
+        X_WB =  RigidTransform(), welded = False):
+    """ Adds a franka panda arm and hand to the multibody plant and welds its base
+    to the world frame
+
+    plant: the multibody plant to add the panda to
+    q0: the initial joint positions 
+    X_WB: the desired transformation between the world frame (W) and the base link
+    of the panda (B)
+    welded: True => the finger joints of the panda will be welded in the open 
+    position
+    """
+    if welded:
+        urdf_file = pydrake.common.FindResourceOrThrow(
+                "./models/panda_arm_hand_welded.urdf")
+    else:
+        urdf_file = pydrake.common.FindResourceOrThrow(
+                "./models/panda_arm_hand.urdf")
+
+    parser = pydrake.multibody.parsing.Parser(plant)
+    panda_model_instance = parser.AddModelFromFile(urdf_file)
+    plant.WeldFrames(plant.world_frame(), plant.GetFrameByName("panda_link0"), X_WB)
+    
+    index = 0
+    for joint_index in plant.GetJointIndices(panda_model_instance):
+        joint = plant.get_mutable_joint(joint_index)
+        if isinstance(joint, pydrake.multibody.tree.RevoluteJoint):
+            joint.set_default_angle(q0[index])
+            index+=1
+
+    return panda_model_instance
 
 def AddPanda(plant, q0 = [0.0, 0.1, 0, -1.2, 0, 1.6, 0], X_WB =  RigidTransform()):
     """ Adds a franka panda arm without any hand to the mutlibody plant and welds it to the world frame

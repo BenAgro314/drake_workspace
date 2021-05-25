@@ -1,6 +1,0 @@
-
-directives:
-
-- add_model:
-    name: gripper
-    file: package://panda_station/schunk_wsg_50_welded_fingers.sdf

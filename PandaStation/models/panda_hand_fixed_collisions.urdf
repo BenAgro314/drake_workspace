@@ -13,7 +13,7 @@
     <visual>
       <origin rpy="1.57079632679 0 0"/>
       <geometry>
-        <mesh filename="./meshes/visual/hand.obj"/>
+        <mesh filename="./meshes/panda_meshes/hand.obj"/>
       </geometry>
     </visual>
     <collision>
@@ -62,7 +62,7 @@
     <visual>
         <origin rpy="1.57079632679 0 0" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="./meshes/visual/finger.obj"/>
+        <mesh filename="./meshes/panda_meshes/finger.obj"/>
       </geometry>
     </visual>
     <collision>
@@ -99,7 +99,7 @@
     <visual>
       <origin rpy="1.57079632679 0 3.14159265359" xyz="0 0 0"/>
       <geometry>
-        <mesh filename="./meshes/visual/finger.obj"/>
+        <mesh filename="./meshes/panda_meshes/finger.obj"/>
       </geometry>
     </visual>
     <collision>

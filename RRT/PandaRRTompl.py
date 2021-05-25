@@ -44,8 +44,8 @@ class PandaRRTompl:
 
         # construct RRT
 
-
-        self.fix_panda_collisions()
+        # no longer need to call this with pre-collision filtering:
+        #self.fix_panda_collisions()
 
         # find normal number of collision in starting state
         query_object = self.query_output_port.Eval(self.scene_graph_context)

@@ -1,5 +1,5 @@
 import pydrake.all
-from pydrake.all import LoadModelDirectives, ProcessModelDirectives
+from pydrake.all import LoadModelDirectives, ProcessModelDirectives, GeometrySet
 from .scenarios import AddPanda, AddPandaHand, AddRgbdSensors
 from .panda_hand_position_controller import PandaHandPositionController, MakeMultibodyStateToPandaHandStateSystem
 from .utils import FindResource, AddPackagePaths
@@ -169,9 +169,27 @@ class PandaStation(pydrake.systems.framework.Diagram):
         plant_state = self.GetMutableSubsystemState(self.plant, state)
         self.plant.SetVelocities(plant_context, plant_state, self.hand, [v/2.0, v/2.0])
 
+    def fix_collisions(self):
+        # fix collisions in this model by removing collisions between
+        # panda_link5<->panda_link7 and panda_link7<->panda_hand
+        panda_link5 =  self.plant.GetFrameByName("panda_link5").body()
+        panda_link5 =  GeometrySet(
+                self.plant.GetCollisionGeometriesForBody(panda_link5))
+        panda_link7 =  self.plant.GetFrameByName("panda_link7").body()
+        panda_link7 =  GeometrySet(
+                self.plant.GetCollisionGeometriesForBody(panda_link7))
+        panda_hand =  self.plant.GetFrameByName("panda_hand").body()
+        panda_hand =  GeometrySet(
+                self.plant.GetCollisionGeometriesForBody(panda_hand))
+        self.scene_graph.ExcludeCollisionsBetween(panda_link5, panda_link7)
+        self.scene_graph.ExcludeCollisionsBetween(panda_link7, panda_hand)
+
     def SetupDefaultStation(self):
         self.panda = AddPanda(self.plant)
         self.hand = AddPandaHand(self.plant, self.panda)
+
+        self.fix_collisions()
+        
 
     def SetupBinStation(self):
         self.setup = "BinStation"
@@ -185,31 +203,6 @@ class PandaStation(pydrake.systems.framework.Diagram):
 
         # adds hand and arm
         self.SetupDefaultStation() 
-
-        '''
-        # add first bin
-        X_WC = pydrake.math.RigidTransform(
-                pydrake.math.RotationMatrix.MakeZRotation(np.pi/2), [-0.145, -0.63, 0.075])
-        bin1 = parser.AddModelFromFile(bin_file, "bin1")
-        self.plant.WeldFrames(self.plant.world_frame(), self.plant.GetFrameByName('bin_base', bin1), X_WC)
-
-        # add second bin
-        X_WC = pydrake.math.RigidTransform(
-                pydrake.math.RotationMatrix.MakeZRotation(np.pi), [0.5, -0.1, 0.075])
-        bin2 = parser.AddModelFromFile(bin_file, "bin2")
-        self.plant.WeldFrames(self.plant.world_frame(), self.plant.GetFrameByName('bin_base', bin2), X_WC)
-
-        # add cameras
-        X_Camera = pydrake.math.RigidTransform(
-                pydrake.math.RollPitchYaw(deg_to_rad(-150), 0, np.pi/2.0).ToRotationMatrix(),
-                [0.3, -0.65, 1])
-        camera = parser.AddModelFromFile(camera_file, "camera")
-        camera = self.plant.GetBodyByName("base", camera)
-        self.camera_info['camera'] = X_Camera
-        self.plant.WeldFrames(self.plant.world_frame(), camera.body_frame(), X_Camera)
-        '''
-
-        # add default hand and arm
 
 
     def AddManipulandFromFile(self, model_file, X_WObject):
