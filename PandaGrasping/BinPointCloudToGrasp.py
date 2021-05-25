@@ -164,7 +164,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
         for pt in cloud.points:
             distances = query_object.ComputeSignedDistanceToPoint(pt, threshold=margin)
             if distances:
-                #print('collision with point cloud')
+                #print('\ncollision with point cloud')
                 return np.inf
 
         n_GC = X_GW.rotation().multiply(np.asarray(cloud.normals)[indices,:].T)
@@ -211,11 +211,11 @@ class BinPointCloudToGraspSystem(LeafSystem):
         # Try orientations from the center out
         min_pitch=-np.pi/3.0
         max_pitch=np.pi/3.0
-        alpha = np.array([0.5])#, 0.65, 0.35])#, 0.8, 0.2, 1.0, 0.0])
+        alpha = np.array([0.5, 0.65, 0.35, 0.8, 0.2, 1.0, 0.0])
         thetas = (min_pitch + (max_pitch - min_pitch)*alpha)
         warm_start = np.array([-1.26007738, 0.73961558, -0.52305409, -1.61854487, 
             0.43427186, 2.23120941, -0.36937004])
-        for theta in thetas: 
+        for theta in thetas[:1]: 
             #print(f"trying angle {theta}")
             # Rotate the object in the hand by a random rotation (around the normal).
             R_WG2 = R_WG.multiply(RotationMatrix.MakeYRotation(theta))
@@ -230,7 +230,7 @@ class BinPointCloudToGraspSystem(LeafSystem):
             q = self.find_qV2(X_G, warm_start)
 
             if q is None:
-                #print("failed ik")
+                #print("\nfailed ik")
                 continue
 
             #warm_start =  q
@@ -323,7 +323,16 @@ class BinPointCloudToGraspSystem(LeafSystem):
         time = context.get_time()
 
         if self.status == "initialization":
-            print("INITIALIZATION")
+            print("INITIALIZATION", end = "")
+
+            if (time < 0.5):
+                print("", end = "\r")
+                q_start = self.EvalVectorInput(context, 
+                        self.panda_position_input_port.get_index()).get_value()
+                output.set_value(q_start)
+                return
+            print("")
+                
             cropped_pcd = self.process_bin_point_cloud(context)
 
             q_start = self.EvalVectorInput(context, 
@@ -336,13 +345,14 @@ class BinPointCloudToGraspSystem(LeafSystem):
             X_G = None
             #print('looking for candidate grasp')
             for i in range(1000):
-                print(f"Try number {i+1}", end = "\r")
+                print(f"Try number {i+1}", end = "")
                 cost, X_G, q_goal = self.generate_grasp_candidate_antipodal(cropped_pcd)
                 if np.isfinite(cost):
-                    print("FOUND GRASP")
+                    print("\nFOUND GRASP")
                     self.X_WG = X_G
                     self.q_G = q_goal
                     break
+                print("", end = "\r")
                 
             assert np.isfinite(cost), "could not find valid grasp pose"
            
@@ -390,6 +400,9 @@ class BinPointCloudToGraspSystem(LeafSystem):
                 self.make_place_traj(q_start, time)
                 self.status = "placing"
                 print("PLACING")
+                # change X_WPlace so it is not the same for the next object
+                up = RigidTransform(RotationMatrix(), [0,0,-0.05])
+                self.X_WPlace  = self.X_WPlace.multiply(up)
 
         if self.status == "placing":
             if (time <= self.panda_traj.end_time()):
@@ -412,6 +425,12 @@ class BinPointCloudToGraspSystem(LeafSystem):
             else:
                 q_command = self.q_initial
                 output.set_value(q_command)
+                try:
+                    cropped_pcd = self.process_bin_point_cloud(context)
+                except:
+                    print("No item found in bin", end = "\r") 
+                else:
+                    self.status = "initialization"
 
     def make_place_traj(self, q_start, time):
         # hand moving downwards
