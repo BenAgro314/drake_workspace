@@ -44,7 +44,7 @@ class PandaRRTompl:
 
         # construct RRT
 
-        # no longer need to call this with pre-collision filtering:
+
         #self.fix_panda_collisions()
 
         # find normal number of collision in starting state

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<robot name="hand">
+<robot name="cylinder">
     <link name="base_link">
         <inertial>
             <mass value = "1"/>

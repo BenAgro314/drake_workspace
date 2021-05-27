@@ -203,6 +203,34 @@ class PandaStation(pydrake.systems.framework.Diagram):
 
         # adds hand and arm
         self.SetupDefaultStation() 
+    
+    def SetupTableStation(self):
+        self.setup = "TableStation"
+
+        directive = FindResource("models/table_top.yaml")
+        parser = pydrake.multibody.parsing.Parser(self.plant)
+        AddPackagePaths(parser)
+
+        # adds bins and cameras
+        ProcessModelDirectives(LoadModelDirectives(directive), self.plant, parser)
+
+        # adds hand and arm
+        self.SetupDefaultStation() 
+
+    def SetupStationFromFile(setup_name, file_name):
+        """ setup a the station from a yaml file in the models directory """
+
+        self.setup = setup_name
+        
+        directive = FindResource("models/" + file_name + ".yaml")
+        parser = pydrake.multibody.parsing.Parser(self.plant)
+        AddPackagePaths(parser)
+
+        # adds bins and cameras
+        ProcessModelDirectives(LoadModelDirectives(directive), self.plant, parser)
+
+        # adds hand and arm
+        self.SetupDefaultStation() 
 
 
     def AddManipulandFromFile(self, model_file, X_WObject):
@@ -218,3 +246,4 @@ class PandaStation(pydrake.systems.framework.Diagram):
 
     def get_camera_info(self):
         return self.camera_info
+
