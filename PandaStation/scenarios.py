@@ -149,7 +149,7 @@ def AddPanda(plant, q0 = [0.0, 0.1, 0, -1.2, 0, 1.6, 0], X_WB =  RigidTransform(
     return panda_model_instance
 
 
-def AddPandaHand(plant, panda_model_instance, roll = 0, welded = False):
+def AddPandaHand(plant, panda_model_instance = None, roll = 0, welded = False):
     """Adds a hand to the panda arm (panda_link8)
 
     plant: the multibody plant 
@@ -167,8 +167,9 @@ def AddPandaHand(plant, panda_model_instance, roll = 0, welded = False):
                 FindResource("models/panda_hand_fixed_collisions.urdf"))
         #gripper = parser.AddModelFromFile(pydrake.common.FindResourceOrThrow("drake/manipulation/models/franka_description/urdf/hand.urdf"))
 
-    X_8G = RigidTransform(RollPitchYaw(0, 0, roll), [0,0,0])
-    plant.WeldFrames(plant.GetFrameByName("panda_link8", panda_model_instance), plant.GetFrameByName("panda_hand",gripper), X_8G)
+    if panda_model_instance is not None:
+        X_8G = RigidTransform(RollPitchYaw(0, 0, roll), [0,0,0])
+        plant.WeldFrames(plant.GetFrameByName("panda_link8", panda_model_instance), plant.GetFrameByName("panda_hand",gripper), X_8G)
     return gripper
 
 def AddShape(plant, shape, name, mass = 1, mu = 1, color = [0.5, 0.5, 0.9, 1]):

@@ -63,7 +63,7 @@ class PandaStation(pydrake.systems.framework.Diagram):
 
         # plant for the panda controller
         controller_panda = AddPanda(self.controller_plant)
-        AddPandaHand(self.controller_plant, controller_panda, welded = True) # welded so the controller doesn't care about the hand joints
+        AddPandaHand(self.controller_plant, panda_model_instance = controller_panda, welded = True) # welded so the controller doesn't care about the hand joints
         self.controller_plant.Finalize()
 
         # add panda controller. TODO(ben): make sure that this controller is realistic
@@ -186,7 +186,7 @@ class PandaStation(pydrake.systems.framework.Diagram):
 
     def SetupDefaultStation(self):
         self.panda = AddPanda(self.plant)
-        self.hand = AddPandaHand(self.plant, self.panda)
+        self.hand = AddPandaHand(self.plant, panda_model_instance = self.panda)
 
         self.fix_collisions()
         
