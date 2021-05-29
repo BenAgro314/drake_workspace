@@ -4,7 +4,7 @@ echo ""
 echo "Running drake_workspace container"
 echo ""
 
-port=2400
+port=2300
 name='drake_workspace'
 
 while getopts p:n: option

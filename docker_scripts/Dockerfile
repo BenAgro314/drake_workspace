@@ -47,6 +47,7 @@ RUN apt-get install sudo
 #RUN echo "PermitRootLogin yes"  >> /etc/ssh/sshd_config
 
 RUN apt-get install xfce4-terminal
+RUN apt-get install gedit
 # changing the terminal config
 RUN printf "2\n" | update-alternatives --config x-terminal-emulator
 
