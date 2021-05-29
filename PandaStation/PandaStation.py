@@ -261,6 +261,9 @@ class PandaStation(Diagram):
     def get_camera_info(self):
         return self.camera_info
 
+    def GetPanda(self):
+        return self.panda
+
 class HandEnv(Diagram):
     
     def __init__(self, time_step = 0.001):
