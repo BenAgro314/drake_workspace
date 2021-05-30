@@ -227,51 +227,68 @@ def box_grasp_pose(shape_info, station, station_context):
     X_WG = G.CalcPoseInWorld(plant_context)
 
     axes = [0, 1, 2] # x y z
-    #for axis in axes:
-    ik = InverseKinematics(plant, plant_context)
-    ik.AddMinimumDistanceConstraint(0, 0.1)
-    # grabbing it widthwise
-    margin = 0.08 - box.width()
-    print('width', box.width())
-    col_margin = 10e-3
-    print(margin)
-    if (margin < 0):
-        return None
-    p_GQu_G = [box.width()/2 + margin/2, box.depth()/2, box.height()/2]
-    p_GQl_G = [box.width()/2, - box.depth()/2, - box.height()/2]
-    print('lower', p_GQl_G, 'upper', p_GQu_G)
-    ik.AddPositionConstraint(hand_frame, 
-            [0, 0.04, 0.1],
-            G,
-            p_GQl_G,
-            p_GQu_G)
+    costs = []
+    qs = []
+    for a in axes:
+        #for axis in axes:
+        ik = InverseKinematics(plant, plant_context)
+        ik.AddMinimumDistanceConstraint(0, 0.1)
+        dim = None
+        if a == 0: #x
+            dim = box.width()
+        if a == 1: #y
+            dim = box.depth()
+        if a == 2: #z
+            dim = box.height()
+        margin = 0.08 - dim
+        if (margin < 0):
+            continue 
+        unit_vec = np.zeros(3)
+        unit_vec[a] += 1
+        p_GQu_G = [box.width()/2 + margin/2, box.depth()/2, box.height()/2]
+        p_GQu_G[a] += margin/2
+        p_GQl_G = [-box.width()/2, - box.depth()/2, - box.height()/2]
+        p_GQl_G[a]*= -1.0
+        ik.AddPositionConstraint(hand_frame, 
+                [0, 0.04, 0.1],
+                G,
+                p_GQl_G,
+                p_GQu_G)
 
-    p_GQu_G = [-box.width()/2, box.depth()/2, box.height()/2]
-    p_GQl_G = [-box.width()/2 - margin/2, - box.depth()/2, - box.height()/2]
-    print('lower', p_GQl_G, 'upper', p_GQu_G)
-    ik.AddPositionConstraint(hand_frame, 
-            [0, -0.04, 0.1],
-            G,
-            p_GQl_G,
-            p_GQu_G)
+        p_GQu_G = [box.width()/2, box.depth()/2, box.height()/2]
+        p_GQu_G[a]*= -1.0
+        p_GQl_G = [-box.width()/2, - box.depth()/2, - box.height()/2]
+        p_GQl_G[a] -= margin/2
+        ik.AddPositionConstraint(hand_frame, 
+                [0, -0.04, 0.1],
+                G,
+                p_GQl_G,
+                p_GQu_G)
 
-    ik.AddAngleBetweenVectorsConstraint(hand_frame, 
-            [0, 1, 0],
-            plant.world_frame(),
-            X_WG.rotation().col(0),
-            0.0,
-            0.01)
+        ik.AddAngleBetweenVectorsConstraint(hand_frame, 
+                [0, 1, 0],
+                plant.world_frame(),
+                X_WG.rotation().col(a),
+                0.0,
+                0.01)
 
-    prog = ik.prog()
-    q = ik.q()
-    q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
-    prog.AddQuadraticErrorCost(np.identity(len(q)), q_nominal, q)
-    prog.SetInitialGuess(q, q_nominal)
-    result = Solve(prog)
-    cost = result.get_optimal_cost()
-    print(result.is_success())
-    print(result.get_optimal_cost())
-    return result.GetSolution(q)
+        prog = ik.prog()
+        q = ik.q()
+        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
+        prog.AddQuadraticErrorCost(np.identity(len(q)), q_nominal, q)
+        prog.SetInitialGuess(q, q_nominal)
+        result = Solve(prog)
+        cost = result.get_optimal_cost()
+        if not result.is_success():
+            cost = np.inf
+
+        costs.append(cost)
+        qs.append(result.GetSolution(q))
+        print(cost)
+
+
+    indices = np.argsort(costs)
+    return qs[indices[0]] # return lowest cost
 
 
 
