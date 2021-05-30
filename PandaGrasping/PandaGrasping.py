@@ -59,7 +59,7 @@ def grasp_candidate_cost(plant_context, cloud, plant, scene_graph, scene_graph_c
     # (for flexibility in the IK solution)
 
     p_GC_z = p_GC[2, indices]
-    zs = np.linspace(p_GC_z.min() - 0.0995, p_GC_z.min() - 0.066, 10)
+    zs = np.linspace(p_GC_z.min() - 0.0905, p_GC_z.min() - 0.066, 10)
 
     valids = []
     for p_Gzshift in zs:

@@ -46,8 +46,9 @@ RUN apt-get install sudo
 # this means root can ssh in with a password
 #RUN echo "PermitRootLogin yes"  >> /etc/ssh/sshd_config
 
-RUN apt-get install xfce4-terminal
-RUN apt-get install gedit
+RUN apt-get -y install xfce4-terminal
+RUN apt-get -y install gedit
+RUN apt-get -y install trash-cli
 # changing the terminal config
 RUN printf "2\n" | update-alternatives --config x-terminal-emulator
 
