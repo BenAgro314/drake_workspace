@@ -1,5 +1,5 @@
 *.swp
 *.pyc
 **/.ipynb_checkpoints
-**/.Trash-*
+**/.Trash*
 *.gz
