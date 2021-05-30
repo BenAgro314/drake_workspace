@@ -30,8 +30,11 @@ class PandaStation(Diagram):
         self.object_poses = []
         self.camera_info = {} #dictionary in the form name: pose
 
+        self.body_info = {} # path: (name, body_index)
+
         self.controller_plant = MultibodyPlant(time_step = self.time_step)
         self.welded_hand = False
+        self.directive = None
 
         # this environment has only the hand, for grasp planning
         self.hand_env = HandEnv()
@@ -202,24 +205,24 @@ class PandaStation(Diagram):
         self.hand_env.AddHand()
 
     def SetupBinStation(self, welded_hand = False):
-        directive = FindResource("models/two_bins_w_cameras.yaml")
+        self.directive = FindResource("models/two_bins_w_cameras.yaml")
         parser = Parser(self.plant)
         AddPackagePaths(parser)
 
         # adds bins and cameras
-        ProcessModelDirectives(LoadModelDirectives(directive), self.plant, parser)
+        ProcessModelDirectives(LoadModelDirectives(self.directive), self.plant, parser)
 
         self.hand_env.SetupFromFile("models/two_bins_w_cameras.yaml")
         # adds hand and arm
         self.SetupDefaultStation(welded_hand) 
     
     def SetupTableStation(self, welded_hand = False):
-        directive = FindResource("models/table_top.yaml")
+        self.directive = FindResource("models/table_top.yaml")
         parser = Parser(self.plant)
         AddPackagePaths(parser)
 
         # adds bins and cameras
-        ProcessModelDirectives(LoadModelDirectives(directive), self.plant, parser)
+        ProcessModelDirectives(LoadModelDirectives(self.directive), self.plant, parser)
 
         self.hand_env.SetupFromFile("models/table_top.yaml")
         # adds hand and arm
@@ -231,12 +234,12 @@ class PandaStation(Diagram):
         self.setup = setup_name
         
         # TODO(ben): generalize this 
-        directive = FindResource("models/" + file_name + ".yaml")
+        self.directive = FindResource("models/" + file_name + ".yaml")
         parser = Parser(self.plant)
         AddPackagePaths(parser)
 
         # adds bins and cameras
-        ProcessModelDirectives(LoadModelDirectives(directive), self.plant, parser)
+        ProcessModelDirectives(LoadModelDirectives(self.directive), self.plant, parser)
 
         self.hand_env.SetupFromFile("models/" + file_name + ".yaml")
         # adds hand and arm
@@ -250,6 +253,7 @@ class PandaStation(Diagram):
         model = parser.AddModelFromFile(path, name)
         indices = self.plant.GetBodyIndices(model)
         assert len(indices) == 1, "Currently, we only support adding models with one body"
+        self.body_info[path] = (name, indices[0])
         self.object_ids.append(indices[0])
         self.object_poses.append(X_WO)
         if to_hand_env:
@@ -263,6 +267,9 @@ class PandaStation(Diagram):
 
     def GetPanda(self):
         return self.panda
+
+    def GetHand(self):
+        return self.hand
 
 class HandEnv(Diagram):
     
