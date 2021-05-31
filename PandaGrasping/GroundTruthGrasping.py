@@ -99,59 +99,6 @@ def create_welded_station(station, station_context):
 
     return welded_station, welded_body_infos
 
-
-
-
-
-
-
-
-# DEPRECIATED
-def parse_manipuland_shapes(station, station_context):
-    """
-    Return a list of ShapeInfo instances for all of the 
-    manipulands that are possible to grasp in the 
-    station
-
-    Args:
-        station: PandaStation system
-        station_context: context for the PandaStation system
-    """
-    plant = station.get_multibody_plant()
-    plant_context = station.GetSubsystemContext(plant, station_context)
-    scene_graph = station.get_scene_graph()
-    scene_graph_context = station.GetSubsystemContext(scene_graph, station_context)
-    query_object = scene_graph.get_query_output_port().Eval(scene_graph_context)
-    inspector = query_object.inspector()
-    shape_infos = []
-    for body_id in station.object_ids:
-        body = plant.get_body(body_id)
-        X_WB = body.EvalPoseInWorld(plant_context)
-        for geom_id in plant.GetCollisionGeometriesForBody(body):
-            shape = inspector.GetShape(geom_id)
-            X_BG = inspector.GetPoseInFrame(geom_id)
-            if type(shape) == Sphere:
-                if shape.radius() < 0.001 or shape.radius() > 0.055: 
-                    # we won't consider picking up a sphere with these dimensions
-                    continue 
-                else:
-                    shape_infos.append(ShapeInfo(body, X_WB, X_BG, shape))
-            if type(shape) == Cylinder:
-                if shape.radius() > 0.04 and shape.length() > 0.08: 
-                    # we won't consider picking up a cylinder with these dimensions
-                    continue 
-                else:
-                    shape_infos.append(ShapeInfo(body, X_WB, X_BG, shape))
-            if type(shape) == Box:
-                max_dim = max([shape.depth(), shape.width(), shape.height()])
-                if  max_dim  > 0.08: 
-                    # we won't consider picking up a cylinder with these dimensions
-                    continue 
-                else:
-                    shape_infos.append(ShapeInfo(body, X_WB, X_BG, shape))
-
-    return shape_infos
-
 def is_graspable(shape_info):
     shape = shape_info.shape
     if type(shape) == Sphere:
@@ -190,6 +137,62 @@ def grasp_pose(body_info, station, station_context):
         costs.append(cost)
     indices = np.argsort(costs)
     return qs[indices[0]], costs[indices[0]]
+
+def sphere_grasp_pose(shape_info, station, station_context):
+    """
+    Returns the best generalized coordinates, q (np.array), for the panda
+    in the PandaStation station to grasp the sphere in shape_info
+
+    Args:
+        shape_info: a shape info instance with type Sphere
+        station: a PandaStation system
+    """
+
+    assert shape_info.type == Sphere, "This shape is not a Sphere"
+
+    weights = np.array([1, 100])
+    norm = np.linalg.norm(weights)
+    assert norm != 0, "invalid weights"
+    weights = weights/norm
+
+    plant = station.get_multibody_plant()
+    assert plant.num_positions() == 7, "This plant is not suitable for inverse kinematics"
+    plant_context = station.GetSubsystemContext(plant, station_context)
+    hand = station.GetHand()
+    hand_frame = plant.GetFrameByName("panda_hand", hand)
+
+    cylinder = shape_info.shape
+    G = shape_info.frame
+    X_WG = G.CalcPoseInWorld(plant_context)
+
+    p_tol = 10e-3
+    theta_tol = 0.01
+    finger_width = 0.020
+
+    ik = InverseKinematics(plant, plant_context)
+    ik.AddMinimumDistanceConstraint(0, 0.1)
+    ik.AddPositionConstraint(
+            hand_frame,
+            [0, 0, 0.1],
+            G,
+            [-p_tol, -p_tol, -p_tol],
+            [p_tol, p_tol, p_tol])
+    prog = ik.prog()
+    q = ik.q()
+    q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
+    prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
+            q_nominal, q)
+    AddDeviationFromVerticalCost(prog, q, 
+            plant, plant_context, weight = weights[1])
+    prog.SetInitialGuess(q, q_nominal)
+    result = Solve(prog)
+    cost = result.get_optimal_cost()
+
+    if not result.is_success():
+        cost = np.inf
+
+    return result.GetSolution(q), cost
+
 
 def cylinder_grasp_pose(shape_info, station, station_context):
     """
