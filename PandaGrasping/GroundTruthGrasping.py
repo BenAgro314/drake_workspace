@@ -161,8 +161,8 @@ def is_graspable(shape_info):
         if shape.radius() > 0.04: 
             return False
     if type(shape) == Box:
-        max_dim = max([shape.depth(), shape.width(), shape.height()])
-        if  max_dim  > 0.08: 
+        min_dim = min([shape.depth(), shape.width(), shape.height()])
+        if  min_dim  > 0.08: 
             return False
     return True
 
@@ -179,7 +179,6 @@ def grasp_pose(body_info, station, station_context):
     for shape_info in body_info.shape_infos:
         if not is_graspable(shape_info):
             continue 
-
         if shape_info.type == Cylinder:
             grasp_qs.append(cylinder_grasp_pose(shape_info, station, station_context))
         if shape_info.type == Box:
@@ -214,6 +213,17 @@ def box_grasp_pose(shape_info, station, station_context):
         - TODO(ben): quadratic cost for cartesian distance from
           center of mass from body
     """
+
+    # weighting parameters in order:
+    # deviation_from_nominal_weight
+    # deviation_from_vertical_weight 
+    # deviation_from_box_center_weight 
+    # TODO(ben): make something clever that depends on object size
+    weights = np.array([0,1,100])
+    norm = np.linalg.norm(weights)
+    assert norm != 0, "invalid weights"
+    weights = weights/norm
+
 
 
     plant = station.get_multibody_plant()
@@ -275,10 +285,17 @@ def box_grasp_pose(shape_info, station, station_context):
         prog = ik.prog()
         q = ik.q()
         q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
-        prog.AddQuadraticErrorCost(np.identity(len(q)), q_nominal, q)
+        prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
+                q_nominal, q)
+        AddDeviationFromVerticalCost(prog, q, 
+                plant, plant_context, weight = weights[1])
+        AddDeviationFromBoxCenterCost(prog, q,
+                plant, plant_context, X_WG.translation(),
+                weight = weights[2])
         prog.SetInitialGuess(q, q_nominal)
         result = Solve(prog)
         cost = result.get_optimal_cost()
+
         if not result.is_success():
             cost = np.inf
 
@@ -291,5 +308,42 @@ def box_grasp_pose(shape_info, station, station_context):
     return qs[indices[0]] # return lowest cost
 
 
+def AddDeviationFromVerticalCost(prog, q, plant, plant_context, weight = 1):
+    plant_ad = plant.ToAutoDiffXd()
+    plant_context_ad = plant_ad.CreateDefaultContext()
 
-    
+    def deviation_from_vertical_cost(q):
+        plant_ad.SetPositions(plant_context_ad, q)
+        hand_frame = plant_ad.GetFrameByName("panda_hand")
+        X_WH = hand_frame.CalcPoseInWorld(plant_context_ad)
+        R_WH = X_WH.rotation()
+        z_H = R_WH.matrix().dot(np.array([0,0,1])) # extract the z direction 
+        #print(z_H[0].value(), z_H[1].value(), z_H[2].value())
+        return z_H.dot(np.array([0,0,1]))
+
+    cost = lambda q: weight*deviation_from_vertical_cost(q)
+    prog.AddCost(cost, q) 
+
+#TODO(ben): geometric center -> mass center
+def AddDeviationFromBoxCenterCost(prog, q, plant, plant_context, p_WC, weight = 1):
+    plant_ad = plant.ToAutoDiffXd()
+    plant_context_ad = plant_ad.CreateDefaultContext()
+
+    def deviation_from_box_center_cost(q):
+        plant_ad.SetPositions(plant_context_ad, q)
+        hand_frame = plant_ad.GetFrameByName("panda_hand")
+        # C: center of box
+        # H: hand frame
+        # W: world frame
+        # M: point in between fingers
+        X_WH = hand_frame.CalcPoseInWorld(plant_context_ad)
+        R_WH = X_WH.rotation()
+        p_WH = X_WH.translation()
+        p_HM_H = np.array([0, 0, 0.1])
+        p_WM = p_WH + R_WH.multiply(p_HM_H)
+        # we do not care about z (as much?) TODO(ben): look into this
+        return ((p_WM - p_WC)[:-1]).dot((p_WM - p_WC)[:-1]) 
+
+    cost = lambda q: weight*deviation_from_box_center_cost(q)
+    prog.AddCost(cost, q) 
+
