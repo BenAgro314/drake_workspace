@@ -109,7 +109,8 @@ def is_graspable(shape_info):
             return False
     if type(shape) == Box:
         min_dim = min([shape.depth(), shape.width(), shape.height()])
-        if  min_dim  > 0.08: 
+        min_margin = 0.006
+        if  min_dim  >= 0.08 - min_margin*2: 
             return False
     return True
 
@@ -402,7 +403,8 @@ def box_grasp_pose(shape_info, station, station_context):
             if a == 2: #z
                 dim = box.height()
             margin = 0.08 - dim
-            if (margin < 0):
+            eps = 1e-3
+            if (margin < 0.006 + eps):
                 continue 
             unit_vec = np.zeros(3)
             unit_vec[a] += 1
