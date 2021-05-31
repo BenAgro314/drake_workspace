@@ -187,7 +187,6 @@ def grasp_pose(body_info, station, station_context):
         if shape_info.type == Sphere:
             q, cost = sphere_grasp_pose(shape_info, station, station_context)
         qs.append(q)
-        print(q)
         costs.append(cost)
     indices = np.argsort(costs)
     return qs[indices[0]], costs[indices[0]]
@@ -204,24 +203,7 @@ def cylinder_grasp_pose(shape_info, station, station_context):
 
     assert shape_info.type == Cylinder, "This shape is not a Cylinder"
 
-    """
-    For gripping along the cylinder body:
-        - no collisions
-        - there are acomplished with one bounding box constraint
-            - align the x axis of the gripper with the cylinder axis 
-            - ensure that the gripper is around the axis
-        - penalize distance between the hand and the cylinder center
-        - prefer upright grip
-    for gripping on cylinder top:
-        - todo
-    for gripping the cylinder lengthwise:
-        - constrain the grippers to be within the cross section
-        - penalize deviation from the center
-        - no collisions
-
-    """
-
-    weights = np.array([1,10,5])
+    weights = np.array([0, 1, 1])
     norm = np.linalg.norm(weights)
     assert norm != 0, "invalid weights"
     weights = weights/norm
@@ -236,25 +218,31 @@ def cylinder_grasp_pose(shape_info, station, station_context):
     G = shape_info.frame
     X_WG = G.CalcPoseInWorld(plant_context)
 
-
-
     costs = []
     qs = []
 
     p_tol = 10e-3
+    theta_tol = 0.01
+    finger_width = 0.020
 
     if cylinder.radius() < 0.04:
+        lower_z_bound = min(-p_tol, -cylinder.length()/2 + finger_width/2) 
+        upper_z_bound = max(p_tol, cylinder.length()/2 - finger_width/2) 
         ik = InverseKinematics(plant, plant_context)
         ik.AddMinimumDistanceConstraint(0, 0.1)
-        ik.AddPositionConstraint(hand_frame,[0, 0, 0.1], 
-                G, [-p_tol, -p_tol, -cylinder.length()/2 + 0.017], 
-                [p_tol,p_tol,cylinder.length()/2 - 0.017])
-        ik.AddAngleBetweenVectorsConstraint(hand_frame,
+        ik.AddPositionConstraint(
+                hand_frame,
+                [0, 0, 0.1], 
+                G, 
+                [-p_tol, -p_tol, lower_z_bound], 
+                [p_tol,p_tol, upper_z_bound])
+        ik.AddAngleBetweenVectorsConstraint(
+                hand_frame,
                 [0, 1, 0],
                 G, 
                 [0, 0, 1],
-                np.pi/2-0.01,
-                np.pi/2+0.01)
+                np.pi/2-theta_tol,
+                np.pi/2+theta_tol)
         prog = ik.prog()
         q = ik.q()
         q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
@@ -273,51 +261,30 @@ def cylinder_grasp_pose(shape_info, station, station_context):
 
         costs.append(cost)
         qs.append(result.GetSolution(q))
-        print(cost)
-
-    """
-    if cylinder.radius() < 0.04:
-        ik = InverseKinematics(plant, plant_context)
-        ik.AddMinimumDistanceConstraint(0, 0.1)
-        ik.AddPositionConstraint(hand_frame,[0.009, 0, 0.1], 
-                G, [-p_tol, -p_tol, -cylinder.length()/2], 
-                [p_tol,p_tol,cylinder.length()/2])
-        ik.AddPositionConstraint(hand_frame,[-0.009, 0, 0.1], 
-                G, [-p_tol, -p_tol, -cylinder.length()/2], 
-                [p_tol,p_tol,cylinder.length()/2])
-        prog = ik.prog()
-        q = ik.q()
-        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
-        prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
-                q_nominal, q)
-        AddDeviationFromVerticalCost(prog, q, 
-                plant, plant_context, weight = weights[1])
-        prog.SetInitialGuess(q, q_nominal)
-        result = Solve(prog)
-        cost = result.get_optimal_cost()
-
-        if not result.is_success():
-            cost = np.inf
-
-        costs.append(cost)
-        qs.append(result.GetSolution(q))
-        print(cost)
-    """
 
     if cylinder.length() < 0.08:
         signs = [-1, 1]
         for flip in signs:
             margin = 0.08 - cylinder.length()
             radius = cylinder.radius()
+            lower_xy_bound = min(-radius + finger_width/2, -p_tol)
+            upper_xy_bound = max(radius - finger_width/2, p_tol)
             ik = InverseKinematics(plant, plant_context)
             ik.AddMinimumDistanceConstraint(0, 0.1)
-            ik.AddPositionConstraint(hand_frame,[0, 0.04*flip, 0.1], 
-                    G, [-radius, -radius, cylinder.length()/2], 
-                    [radius, radius, cylinder.length()/2 + margin/2])
-            ik.AddPositionConstraint(hand_frame,[0, -0.04*flip, 0.1], 
-                    G, [-radius, -radius, -cylinder.length()/2 - margin/2], 
-                    [radius, radius, -cylinder.length()/2])
-            ik.AddAngleBetweenVectorsConstraint(hand_frame, 
+            ik.AddPositionConstraint(
+                    hand_frame,
+                    [0, 0.04*flip, 0.1], 
+                    G, 
+                    [lower_xy_bound, lower_xy_bound, cylinder.length()/2], 
+                    [upper_xy_bound, upper_xy_bound, cylinder.length()/2 + margin/2])
+            ik.AddPositionConstraint(
+                    hand_frame,
+                    [0, -0.04*flip, 0.1], 
+                    G, 
+                    [lower_xy_bound, lower_xy_bound, -cylinder.length()/2 - margin/2], 
+                    [upper_xy_bound, upper_xy_bound, -cylinder.length()/2])
+            ik.AddAngleBetweenVectorsConstraint(
+                    hand_frame, 
                     [0, flip, 0],
                     plant.world_frame(),
                     X_WG.rotation().col(2),
@@ -341,7 +308,6 @@ def cylinder_grasp_pose(shape_info, station, station_context):
 
             costs.append(cost)
             qs.append(result.GetSolution(q))
-            print(cost)
 
     indices = np.argsort(costs)
     return qs[indices[0]], min(costs)# return lowest cost
@@ -483,7 +449,6 @@ def box_grasp_pose(shape_info, station, station_context):
 
             costs.append(cost)
             qs.append(result.GetSolution(q))
-            print(cost)
 
 
     indices = np.argsort(costs)
@@ -500,7 +465,6 @@ def AddDeviationFromVerticalCost(prog, q, plant, plant_context, weight = 1):
         X_WH = hand_frame.CalcPoseInWorld(plant_context_ad)
         R_WH = X_WH.rotation()
         z_H = R_WH.matrix().dot(np.array([0,0,1])) # extract the z direction 
-        #print(z_H[0].value(), z_H[1].value(), z_H[2].value())
         return z_H.dot(np.array([0,0,1]))
 
     cost = lambda q: weight*deviation_from_vertical_cost(q)
