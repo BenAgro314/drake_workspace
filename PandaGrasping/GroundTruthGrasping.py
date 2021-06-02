@@ -33,7 +33,7 @@ class ShapeInfo:
             s = "sphere"
         return s + " " + str(self.frame)
 
-def create_welded_station(station, station_context):
+def create_welded_station(station, station_context, omni = False):
     """
     Given a PandaStation, return a version with everything welded in place 
     except for the panda arm (fingers are welded as well)
@@ -50,7 +50,10 @@ def create_welded_station(station, station_context):
         station_context: the context for the panda station
     """
     directive = station.directive 
-    welded_station = PandaStation()
+    if not omni:
+        welded_station = PandaStation()
+    else:
+        welded_station = OmniStation()
 
     # setup same environment with directive
     plant = station.get_multibody_plant()
@@ -72,7 +75,6 @@ def create_welded_station(station, station_context):
     # TODO(ben): currently this only supports models with one body
 
     welded_body_infos = []
-
 
     for path, info in list(station.body_info.items()):
         model_name, body_index = info
@@ -114,7 +116,8 @@ def is_graspable(shape_info):
             return False
     return True
 
-def grasp_pose(body_info, station, station_context):
+def grasp_pose(body_info, station, station_context, 
+        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
     """
     Returns the best generalized coordinates, q (np.array), for the panda
     in the PandaStation station to grasp the shape in shape_info
@@ -129,17 +132,19 @@ def grasp_pose(body_info, station, station_context):
         if not is_graspable(shape_info):
             continue 
         if shape_info.type == Cylinder:
-            q, cost = cylinder_grasp_pose(shape_info, station, station_context)
+            q, cost = cylinder_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal)
         if shape_info.type == Box:
-            q, cost = box_grasp_pose(shape_info, station, station_context)
+            q, cost = box_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal)
+
         if shape_info.type == Sphere:
-            q, cost = sphere_grasp_pose(shape_info, station, station_context)
+            q, cost = sphere_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal)
         qs.append(q)
         costs.append(cost)
     indices = np.argsort(costs)
     return qs[indices[0]], costs[indices[0]]
 
-def sphere_grasp_pose(shape_info, station, station_context):
+def sphere_grasp_pose(shape_info, station, station_context,
+        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
     """
     Returns the best generalized coordinates, q (np.array), for the panda
     in the PandaStation station to grasp the sphere in shape_info
@@ -157,7 +162,7 @@ def sphere_grasp_pose(shape_info, station, station_context):
     weights = weights/norm
 
     plant = station.get_multibody_plant()
-    assert plant.num_positions() == 7, "This plant is not suitable for inverse kinematics"
+    assert (q_nominal is None) or plant.num_positions() == len(q_nominal), "Incorrect length of q_nominal"
     plant_context = station.GetSubsystemContext(plant, station_context)
     hand = station.GetHand()
     hand_frame = plant.GetFrameByName("panda_hand", hand)
@@ -180,12 +185,12 @@ def sphere_grasp_pose(shape_info, station, station_context):
             [p_tol, p_tol, p_tol])
     prog = ik.prog()
     q = ik.q()
-    q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
-    prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
-            q_nominal, q)
     AddDeviationFromVerticalCost(prog, q, 
             plant, plant_context, weight = weights[1])
-    prog.SetInitialGuess(q, q_nominal)
+    if q_nominal is not None:
+        prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
+                q_nominal, q)
+        prog.SetInitialGuess(q, q_nominal)
     result = Solve(prog)
     cost = result.get_optimal_cost()
 
@@ -195,7 +200,8 @@ def sphere_grasp_pose(shape_info, station, station_context):
     return result.GetSolution(q), cost
 
 
-def cylinder_grasp_pose(shape_info, station, station_context):
+def cylinder_grasp_pose(shape_info, station, station_context, 
+        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
     """
     Returns the best generalized coordinates, q (np.array), for the panda
     in the PandaStation station to grasp the cylinder in shape_info
@@ -213,7 +219,7 @@ def cylinder_grasp_pose(shape_info, station, station_context):
     weights = weights/norm
 
     plant = station.get_multibody_plant()
-    assert plant.num_positions() == 7, "This plant is not suitable for inverse kinematics"
+    assert (q_nominal is None) or plant.num_positions() == len(q_nominal), "Incorrect length of q_nominal"
     plant_context = station.GetSubsystemContext(plant, station_context)
     hand = station.GetHand()
     hand_frame = plant.GetFrameByName("panda_hand", hand)
@@ -249,14 +255,14 @@ def cylinder_grasp_pose(shape_info, station, station_context):
                 np.pi/2+theta_tol)
         prog = ik.prog()
         q = ik.q()
-        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
-        prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
-                q_nominal, q)
         AddDeviationFromVerticalCost(prog, q, 
                 plant, plant_context, weight = weights[1])
         AddDeviationFromCylinderMiddleCost(prog, q,
                 plant, plant_context, G, weight = weights[2])
-        prog.SetInitialGuess(q, q_nominal)
+        if q_nominal is not None:
+            prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
+                    q_nominal, q)
+            prog.SetInitialGuess(q, q_nominal)
         result = Solve(prog)
         cost = result.get_optimal_cost()
 
@@ -296,14 +302,14 @@ def cylinder_grasp_pose(shape_info, station, station_context):
                     0.01)
             prog = ik.prog()
             q = ik.q()
-            q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
-            prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
-                    q_nominal, q)
             AddDeviationFromVerticalCost(prog, q, 
                     plant, plant_context, weight = weights[1])
             AddDeviationFromCylinderMiddleCost(prog, q,
                     plant, plant_context, G, weight = weights[2])
-            prog.SetInitialGuess(q, q_nominal)
+            if q_nominal is not None:
+                prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
+                        q_nominal, q)
+                prog.SetInitialGuess(q, q_nominal)
             result = Solve(prog)
             cost = result.get_optimal_cost()
 
@@ -337,7 +343,8 @@ def AddDeviationFromCylinderMiddleCost(prog, q, plant, plant_context, G, weight 
     cost = lambda q: weight*deviation_from_cylinder_middle_cost(q)
     prog.AddCost(cost, q) 
 
-def box_grasp_pose(shape_info, station, station_context):
+def box_grasp_pose(shape_info, station, station_context,
+        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
     """
     Returns the best generalized coordinates, q (np.array), for the panda
     in the PandaStation station to grasp the box in shape_info
@@ -377,7 +384,7 @@ def box_grasp_pose(shape_info, station, station_context):
 
 
     plant = station.get_multibody_plant()
-    assert plant.num_positions() == 7, "This plant is not suitable for inverse kinematics"
+    assert (q_nominal is None) or plant.num_positions() == len(q_nominal), "incorret length of q_nominal"
     plant_context = station.GetSubsystemContext(plant, station_context)
     hand = station.GetHand()
     hand_frame = plant.GetFrameByName("panda_hand", hand)
@@ -437,15 +444,15 @@ def box_grasp_pose(shape_info, station, station_context):
 
             prog = ik.prog()
             q = ik.q()
-            q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])
-            prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
-                    q_nominal, q)
             AddDeviationFromVerticalCost(prog, q, 
                     plant, plant_context, weight = weights[1])
             AddDeviationFromBoxCenterCost(prog, q,
                     plant, plant_context, X_WG.translation(),
                     weight = weights[2])
-            prog.SetInitialGuess(q, q_nominal)
+            if q_nominal is not None:
+                prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
+                        q_nominal, q)
+                prog.SetInitialGuess(q, q_nominal)
             result = Solve(prog)
             cost = result.get_optimal_cost()
 

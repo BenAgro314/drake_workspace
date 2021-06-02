@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<robot name="omni_arm">
+
+    <!-- translational links -->
+    <link name="base_link">
+        <inertial>
+            <mass value="0.01"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-07" ixy="0" ixz="0" iyy="1e-07" iyz="0" izz="1e-07"/>
+        </inertial>
+    </link>
+    <link name="x_link">
+        <inertial>
+            <mass value="0.01"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-07" ixy="0" ixz="0" iyy="1e-07" iyz="0" izz="1e-07"/>
+        </inertial>
+    </link>
+    <link name="y_link">
+        <inertial>
+            <mass value="0.01"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-07" ixy="0" ixz="0" iyy="1e-07" iyz="0" izz="1e-07"/>
+        </inertial>
+    </link>
+    <link name="z_link">
+        <inertial>
+            <mass value="0.01"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-07" ixy="0" ixz="0" iyy="1e-07" iyz="0" izz="1e-07"/>
+        </inertial>
+    </link>
+
+    <!-- rotational links -->
+    <link name="roll_link">
+        <inertial>
+            <mass value="0.01"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-07" ixy="0" ixz="0" iyy="1e-07" iyz="0" izz="1e-07"/>
+        </inertial>
+    </link>
+    <link name="pitch_link">
+        <inertial>
+            <mass value="0.01"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-07" ixy="0" ixz="0" iyy="1e-07" iyz="0" izz="1e-07"/>
+        </inertial>
+    </link>
+    <link name="yaw_link">
+        <inertial>
+            <mass value="0.01"/>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <inertia ixx="1e-07" ixy="0" ixz="0" iyy="1e-07" iyz="0" izz="1e-07"/>
+        </inertial>
+        <!--visual>
+            <origin xyz="0.05 0 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.1 0.01 0.01"/>
+            </geometry>
+            <material name ="red">
+                <color rgba="1.0 0.0 0.0 1.0"/>
+            </material>
+        </visual>
+        <visual>
+            <origin xyz="0 0.05 0" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.01 0.1 0.01"/>
+            </geometry>
+            <material name ="green">
+                <color rgba="0.0 0.1 0.0 1.0"/>
+            </material>
+        </visual>
+        <visual>
+            <origin xyz="0 0 0.05" rpy="0 0 0"/>
+            <geometry>
+                <box size="0.01 0.01 0.1"/>
+            </geometry>
+            <material name ="blue">
+                <color rgba="0.0 0.0 1.0 1.0"/>
+            </material>
+        </visual-->
+    </link>
+
+    <!-- prismatic joints -->
+    <joint name="x_joint" type="prismatic">
+        <parent link="base_link"/>
+        <child link="x_link"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <axis xyz="1 0 0"/>
+        <limit effort="100" lower="-10" upper="10" velocity="0.3"/>
+    </joint>
+    <transmission name="x_tran">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="x_joint">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="x_motor">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <joint name="y_joint" type="prismatic">
+        <parent link="x_link"/>
+        <child link="y_link"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="100" lower="-10" upper="10" velocity="0.3"/>
+    </joint>
+    <transmission name="y_tran">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="y_joint">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="y_motor">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <joint name="z_joint" type="prismatic">
+        <parent link="y_link"/>
+        <child link="z_link"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="100" lower="-10" upper="10" velocity="0.3"/>
+    </joint>
+    <transmission name="z_tran">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="z_joint">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="z_motor">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+
+    <!-- revolute joints -->
+    <joint name="roll_joint" type="revolute">
+        <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.1415926535" soft_upper_limit="3.1415926535"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <parent link="z_link"/>
+        <child link="roll_link"/>
+        <axis xyz="1 0 0"/>
+        <limit effort="87" lower="-3.14159265358979" upper="3.14159265358979" velocity="3.141592"/>
+    </joint>
+    <transmission name="roll_tran">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="roll_joint">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="roll_motor">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <joint name="pitch_joint" type="revolute">
+        <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.1415926535" soft_upper_limit="3.1415926535"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <parent link="roll_link"/>
+        <child link="pitch_link"/>
+        <axis xyz="0 1 0"/>
+        <limit effort="87" lower="-3.14159265358979" upper="3.14159265358979" velocity="3.141592"/>
+    </joint>
+    <transmission name="pitch_tran">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="pitch_joint">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="pitch_motor">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+    <joint name="yaw_joint" type="revolute">
+        <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.1415926535" soft_upper_limit="3.1415926535"/>
+        <origin rpy="0 0 0" xyz="0 0 0"/>
+        <parent link="pitch_link"/>
+        <child link="yaw_link"/>
+        <axis xyz="0 0 1"/>
+        <limit effort="87" lower="-3.14159265358979" upper="3.14159265358979" velocity="3.141592"/>
+    </joint>
+    <transmission name="yaw_tran">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="yaw_joint">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="yaw_motor">
+            <hardwareInterface>PositionJointInterface</hardwareInterface>
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+</robot>
+

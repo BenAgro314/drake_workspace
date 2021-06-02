@@ -10,7 +10,8 @@ class TestClass:
         self.param1 = param1
 
     def isStateValid(self, state):
-        return state[0] < self.param1
+        print(state.rotation().x)
+        return True
 
 def isStateValid(state):
     global param
@@ -22,12 +23,10 @@ def plan():
 
 
     dim = 2
-    space = ob.RealVectorStateSpace(dim)
-    bounds = ob.RealVectorBounds(dim)
-    joint_limits = [(0, 1), (0,2), (-1, 2),(-1, 2),(-1, 2),(-1, 2),(-1, 2)]
-    for i in range(dim):
-        bounds.setLow(i, joint_limits[i][0])
-        bounds.setHigh(i, joint_limits[i][1])
+    space = ob.SE3StateSpace()
+    bounds = ob.RealVectorBounds(3)
+    bounds.setLow(-10)
+    bounds.setHigh(10)
     space.setBounds(bounds)
 
     ss = og.SimpleSetup(space)
@@ -35,23 +34,35 @@ def plan():
     state = ob.State(space)
 
     start = ob.State(space)
-    start[0] = 0.1
-    start[1] = 0.1 
+    start[0] = 0.5
+    start[1] = 0
+    start[2] = 0.5
+    start[3] = 8.7e-18
+    start[4] = 1 
+    start[5] = 6.16e-17
+    start[6] = 6.16e-17
+    print(start)
 
     goal = ob.State(space)
-    goal[0] = 0.3
-    goal[1] = 0.4
+    goal[0] = 0.6
+    goal[1] = 0
+    goal[2] = 0.2694
+    goal[3] = -6.12e-17
+    goal[4] = 1
+    goal[5] = -6.12e-17
+    goal[6] = 1.61e-15
+    print(goal)
 
     ss.setStartAndGoalStates(start, goal)
 
-    solved = ss.solve(100)
+    solved = ss.solve()
 
     if (solved):
         ss.simplifySolution()
         path = ss.getSolutionPath() 
         print(len(path.getStates()))
         for state in path.getStates():
-            print(state[0], state[1])
+            print(state)
 
 if __name__ == "__main__":
     plan()
