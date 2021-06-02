@@ -9,7 +9,7 @@ from .panda_hand_position_controller import PandaHandPositionController, MakeMul
 from .utils import FindResource, AddPackagePaths
 import numpy as np
 
-def AddOmni(plant, q0 = [0.5, 0, 0.5, 0, np.pi, 0], X_WB = RigidTransform()):
+def AddOmni(plant, q0 = [0, 0, 0.5, -np.pi, 0, -np.pi], X_WB = RigidTransform()):
 
     urdf_file = FindResource("models/omni_arm.urdf")
 

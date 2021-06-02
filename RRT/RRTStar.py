@@ -4,7 +4,7 @@ from .qspace import QSpace
 
 class RRTStar(RRT):
 
-    def __init__(self, start, goal, is_colliding, collide_checker,
+    def __init__(self, start, goal, is_colliding,
                  q_ranges, max_iter = 1000, goal_sample_rate = 0.05, 
                  interp_distances = 0.1, beta = 15):
         """
@@ -12,8 +12,7 @@ class RRTStar(RRT):
 
         start: starting configuration np.array
         goal: goal configuration np.array
-        collision_checker: a function that intakes a configuration as an np.array and outputs True/False if there is a collision or not
-        collide_checker: the instance of the calss that runs is_colliding
+        is_colliding: a function that intakes a configuration as an np.array and outputs True/False if there is a collision or not
         q_ranges: [(q1_lower, q1_upper), (q2_lower, q2_upper), ... ] is the ranges for each coordinate in configuration space
         max_iter: the maximum number of iterations until we give up
         goal_sample_rate: the probability that we sample the goal configuration
@@ -21,7 +20,7 @@ class RRTStar(RRT):
         beta: the parameter for selecting the nearest nodes (see: https://journals.sagepub.com/doi/10.5772/56718)
         """
 
-        super().__init__(start, goal, is_colliding, collide_checker,
+        super().__init__(start, goal, is_colliding,
                          q_ranges, max_iter, goal_sample_rate, interp_distances)
         self.beta = beta 
 

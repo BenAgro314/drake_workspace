@@ -33,7 +33,8 @@ class ShapeInfo:
             s = "sphere"
         return s + " " + str(self.frame)
 
-def create_welded_station(station, station_context, omni = False):
+def create_welded_station(station, station_context, omni = False,
+        body_index_to_weld_to_hand = None):
     """
     Given a PandaStation, return a version with everything welded in place 
     except for the panda arm (fingers are welded as well)
@@ -65,6 +66,7 @@ def create_welded_station(station, station_context, omni = False):
 
     #setup hand and arm
     welded_station.SetupDefaultStation(welded_hand = True)
+    welded_hand = welded_plant.GetModelInstanceByName("hand")
 
     scene_graph = station.get_scene_graph()
     scene_graph_context = station.GetSubsystemContext(scene_graph, station_context)
@@ -81,9 +83,17 @@ def create_welded_station(station, station_context, omni = False):
         body = plant.get_body(body_index)
         X_WB = body.EvalPoseInWorld(plant_context)
         welded_model = parser.AddModelFromFile(path, model_name)
-        welded_plant.WeldFrames(welded_plant.world_frame(), 
-                welded_plant.GetFrameByName(body.name(), welded_model),
-                X_WB)
+        if (body_index_to_weld_to_hand is not None) and (body_index == body_index_to_weld_to_hand):
+            body_frame = body.body_frame()
+            X_HB = body_frame.CalcPose(plant_context, plant.GetFrameByName("panda_hand"))
+            welded_plant.WeldFrames(welded_plant.GetFrameByName("panda_hand"), 
+                    welded_plant.GetFrameByName(body.name(), welded_model),
+                    X_HB)
+            continue
+        else:
+            welded_plant.WeldFrames(welded_plant.world_frame(), 
+                    welded_plant.GetFrameByName(body.name(), welded_model),
+                    X_WB)
         indices = welded_plant.GetBodyIndices(welded_model)
         assert len(indices) == 1
         welded_body_info = BodyInfo(indices[0])

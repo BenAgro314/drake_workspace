@@ -1,46 +1,38 @@
 from ompl import base as ob
 from ompl import geometric as og
 
-
-param = 0.6
-
-class TestClass:
-
-    def __init__(self, param1):
-        self.param1 = param1
-
-    def isStateValid(self, state):
-        #print(state.rotation().x)
-        return True
-
 def isStateValid(state):
-    global param
-    return state[0] < param
+    print(state[0][0])
+    print(state[1][0])
+    return True
 
 def plan():
 
-    test = TestClass(0.6)
-
-
     dim = 2
-    space = ob.SE3StateSpace()
+    space = ob.CompoundStateSpace()
+    space.addSubspace(ob.RealVectorStateSpace(3), 1)
+    space.addSubspace(ob.RealVectorStateSpace(3), 0.1)
     bounds = ob.RealVectorBounds(3)
     bounds.setLow(-10)
     bounds.setHigh(10)
-    space.setBounds(bounds)
+    space.getSubspace(0).setBounds(bounds)
+    bounds = ob.RealVectorBounds(3)
+    bounds.setLow(-3.1415)
+    bounds.setHigh(3.1415)
+    space.getSubspace(1).setBounds(bounds)
 
     ss = og.SimpleSetup(space)
-    ss.setStateValidityChecker(ob.StateValidityCheckerFn(test.isStateValid))
+    ss.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
     state = ob.State(space)
 
     start = ob.State(space)
+    print(start)
     start[0] = 0.5
     start[1] = 4.56e-18
     start[2] = 0.5
     start[3] = 8.7e-18
     start[4] = 1 
     start[5] = 6.16e-17
-    start[6] = 6.126e-17
     print(start)
 
     goal = ob.State(space)
@@ -50,7 +42,6 @@ def plan():
     goal[3] = -6.12e-17
     goal[4] = 1
     goal[5] = -6.12e-17
-    goal[6] = 1.61e-15
     print(goal)
 
     ss.setStartAndGoalStates(start, goal)

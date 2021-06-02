@@ -14,14 +14,13 @@ class Node:
 
 class RRT:
 
-    def __init__(self, start, goal, is_colliding, collide_checker, q_ranges, max_iter = 1000, goal_sample_rate = 0.05, interp_distances = 0.1):
+    def __init__(self, start, goal, is_colliding, q_ranges, max_iter = 1000, goal_sample_rate = 0.05, interp_distances = 0.1):
         """
         initialize a RRT problem
 
         start: starting configuration np.array
         goal: goal configuration np.array
-        collision_checker: a function that intakes a configuration as an np.array and outputs True/False if there is a collision or not
-        collide_checker: the instance of the calss that runs is_colliding
+        is_colliding : a function that intakes a configuration as an np.array and outputs True/False if there is a collision or not
         q_ranges: [(q1_lower, q1_upper), (q2_lower, q2_upper), ... ] is the ranges for each coordinate in configuration space
         max_iter: the maximum number of iterations until we give up
         goal_sample_rate: the probability that we sample the goal configuration
@@ -32,11 +31,13 @@ class RRT:
 
         assert self.qspace.q_valid(start) and self.qspace.q_valid(goal)
 
+        assert (not is_colliding(start)) and (not is_colliding(goal)), "Invalid start or end states"
+
+
         self.start = Node(start)
         self.goal = Node(goal)
 
         self.is_colliding = is_colliding
-        self.collide_checker = collide_checker
         self.max_iter = max_iter
         self.goal_sample_rate = goal_sample_rate
         self.node_list = []
@@ -56,7 +57,7 @@ class RRT:
     def valid_edge(self, n1, n2):
         path = self.qspace.linear_interpolation(n1.q, n2.q)
         for q in path:
-            if (self.collide_checker.is_colliding(q)):
+            if (self.is_colliding(q)):
                 return False
         return True
 
