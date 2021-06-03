@@ -136,12 +136,12 @@
 
     <!-- revolute joints -->
     <joint name="roll_joint" type="revolute">
-        <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.1416" soft_upper_limit="3.1416"/>
+        <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="0" soft_upper_limit="3.1416"/>
         <origin rpy="0 0 0" xyz="0 0 0"/>
         <parent link="z_link"/>
         <child link="roll_link"/>
         <axis xyz="1 0 0"/>
-        <limit effort="87" lower="-3.1416" upper="3.1416" velocity="3.141592"/>
+        <limit effort="87" lower="0" upper="3.1416" velocity="3.141592"/>
     </joint>
     <transmission name="roll_tran">
         <type>transmission_interface/SimpleTransmission</type>
@@ -154,12 +154,12 @@
         </actuator>
     </transmission>
     <joint name="pitch_joint" type="revolute">
-        <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.1416" soft_upper_limit="3.1416"/>
+        <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="0" soft_upper_limit="3.1416"/>
         <origin rpy="0 0 0" xyz="0 0 0"/>
         <parent link="roll_link"/>
         <child link="pitch_link"/>
         <axis xyz="0 1 0"/>
-        <limit effort="87" lower="-3.1416" upper="3.1416" velocity="3.141592"/>
+        <limit effort="87" lower="0" upper="3.1416" velocity="3.141592"/>
     </joint>
     <transmission name="pitch_tran">
         <type>transmission_interface/SimpleTransmission</type>
@@ -172,12 +172,12 @@
         </actuator>
     </transmission>
     <joint name="yaw_joint" type="revolute">
-        <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="-3.1416" soft_upper_limit="3.1416"/>
+        <safety_controller k_position="100.0" k_velocity="40.0" soft_lower_limit="0" soft_upper_limit="3.1416"/>
         <origin rpy="0 0 0" xyz="0 0 0"/>
         <parent link="pitch_link"/>
         <child link="yaw_link"/>
         <axis xyz="0 0 1"/>
-        <limit effort="87" lower="-3.1416" upper="3.1416" velocity="3.141592"/>
+        <limit effort="87" lower="0" upper="3.1416" velocity="3.141592"/>
     </joint>
     <transmission name="yaw_tran">
         <type>transmission_interface/SimpleTransmission</type>
