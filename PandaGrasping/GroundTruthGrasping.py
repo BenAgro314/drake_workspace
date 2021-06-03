@@ -117,7 +117,7 @@ def is_graspable(shape_info):
         if shape.radius() < 0.001 or shape.radius() > 0.055: 
             return False
     if type(shape) == Cylinder:
-        if shape.radius() > 0.04: 
+        if (shape.radius() > 0.04) and (shape.length() > 0.08 - 0.006*2): 
             return False
     if type(shape) == Box:
         min_dim = min([shape.depth(), shape.width(), shape.height()])
@@ -145,7 +145,6 @@ def grasp_pose(body_info, station, station_context,
             q, cost = cylinder_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal)
         if shape_info.type == Box:
             q, cost = box_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal)
-
         if shape_info.type == Sphere:
             q, cost = sphere_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal)
         qs.append(q)
@@ -296,12 +295,12 @@ def cylinder_grasp_pose(shape_info, station, station_context,
                     [0, 0.04*flip, 0.1], 
                     G, 
                     [lower_xy_bound, lower_xy_bound, cylinder.length()/2], 
-                    [upper_xy_bound, upper_xy_bound, cylinder.length()/2 + margin/2])
+                    [upper_xy_bound, upper_xy_bound, cylinder.length()/2 + margin])
             ik.AddPositionConstraint(
                     hand_frame,
                     [0, -0.04*flip, 0.1], 
                     G, 
-                    [lower_xy_bound, lower_xy_bound, -cylinder.length()/2 - margin/2], 
+                    [lower_xy_bound, lower_xy_bound, -cylinder.length()/2 - margin], 
                     [upper_xy_bound, upper_xy_bound, -cylinder.length()/2])
             ik.AddAngleBetweenVectorsConstraint(
                     hand_frame, 
@@ -426,7 +425,7 @@ def box_grasp_pose(shape_info, station, station_context,
             unit_vec = np.zeros(3)
             unit_vec[a] += 1
             p_GQu_G = [box.width()/2 + margin/2, box.depth()/2, box.height()/2]
-            p_GQu_G[a] += margin/2
+            p_GQu_G[a] += margin
             p_GQl_G = [-box.width()/2, - box.depth()/2, - box.height()/2]
             p_GQl_G[a]*= -1.0
             ik.AddPositionConstraint(hand_frame, 
@@ -438,7 +437,7 @@ def box_grasp_pose(shape_info, station, station_context,
             p_GQu_G = [box.width()/2, box.depth()/2, box.height()/2]
             p_GQu_G[a]*= -1.0
             p_GQl_G = [-box.width()/2, - box.depth()/2, - box.height()/2]
-            p_GQl_G[a] -= margin/2
+            p_GQl_G[a] -= margin
             ik.AddPositionConstraint(hand_frame, 
                     [0, -0.04*flip, 0.1],
                     G,
