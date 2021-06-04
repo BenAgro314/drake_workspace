@@ -30,7 +30,7 @@ class PandaStation(Diagram):
         self.object_poses = []
         self.camera_info = {} #dictionary in the form name: pose
 
-        self.body_info = {} # path: (name, body_index)
+        self.body_info = [] # path: (name, body_index)
 
         self.controller_plant = MultibodyPlant(time_step = self.time_step)
         self.welded_hand = False
@@ -253,11 +253,12 @@ class PandaStation(Diagram):
         model = parser.AddModelFromFile(path, name)
         indices = self.plant.GetBodyIndices(model)
         assert len(indices) == 1, "Currently, we only support adding models with one body"
-        self.body_info[path] = (name, indices[0])
+        self.body_info.append((path, name, indices[0]))
         self.object_ids.append(indices[0])
         self.object_poses.append(X_WO)
         if to_hand_env:
             self.hand_env.AddModelFromFile(path, X_WO, name)
+        return model
 
     def get_hand_env(self):
         return self.hand_env

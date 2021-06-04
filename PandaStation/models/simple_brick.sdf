@@ -1,0 +1,112 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+    <model name="simple_brick">
+        <link name="base_link">
+            <pose>0 0 0 0 0 0</pose>
+            <inertial>
+                <pose>0 0 0 0 0 0</pose>
+                <mass>0.1</mass>
+                <inertia>
+                    <ixx>2.6e-6</ixx>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyy>2.6e-6</iyy>
+                    <iyz>0</iyz>
+                    <izz>2.6e-6</izz>
+                </inertia>
+            </inertial>
+            <visual name = "brick_visual">
+                <pose>0 0 0 0 0 0</pose>
+                <geometry>
+                    <box> 
+                        <size>0.04 0.04 0.04</size>
+                    </box>
+                </geometry>
+            </visual>
+            <collision name = "brick_collision">
+                <pose>0 0 0 0 0 0</pose>
+                <geometry>
+                    <box> 
+                        <size>0.039 0.039 0.039</size>
+                    </box>
+                </geometry>
+            </collision>
+            <collision name = "brick_point_collision0">
+                <pose>-0.02 -0.02 -0.02 0 0 0</pose>
+                <geometry>
+                    <sphere>
+                        <radius>1e-7</radius>
+                    </sphere>
+                </geometry>
+            </collision>
+            <collision name = "brick_point_collision1">
+                <pose>-0.02 -0.02 0.02 0 0 0</pose>
+                <geometry>
+                    <sphere>
+                        <radius>1e-7</radius>
+                    </sphere>
+                </geometry>
+            </collision>
+            <collision name = "brick_point_collision2">
+                <pose>-0.02 0.02 -0.02 0 0 0</pose>
+                <geometry>
+                    <sphere>
+                        <radius>1e-7</radius>
+                    </sphere>
+                </geometry>
+            </collision>
+            <collision name = "brick_point_collision3">
+                <pose>-0.02 0.02 0.02 0 0 0</pose>
+                <geometry>
+                    <sphere>
+                        <radius>1e-7</radius>
+                    </sphere>
+                </geometry>
+            </collision>
+            <collision name = "brick_point_collision4">
+                <pose>0.02 -0.02 -0.02 0 0 0</pose>
+                <geometry>
+                    <sphere>
+                        <radius>1e-7</radius>
+                    </sphere>
+                </geometry>
+            </collision>
+            <collision name = "brick_point_collision5">
+                <pose>0.02 -0.02 0.02 0 0 0</pose>
+                <geometry>
+                    <sphere>
+                        <radius>1e-7</radius>
+                    </sphere>
+                </geometry>
+            </collision>
+            <collision name = "brick_point_collision6">
+                <pose>0.02 0.02 -0.02 0 0 0</pose>
+                <geometry>
+                    <sphere>
+                        <radius>1e-7</radius>
+                    </sphere>
+                </geometry>
+            </collision>
+            <collision name = "brick_point_collision7">
+                <pose>0.02 0.02 0.02 0 0 0</pose>
+                <geometry>
+                    <sphere>
+                        <radius>1e-7</radius>
+                    </sphere>
+                </geometry>
+            </collision>
+        </link>
+        <frame name = "right" attached_to = "base_link">
+            <pose relative_to="base_link">0.2 0 0 0 0 0</pose> 
+        </frame>
+        <frame name = "left" attached_to = "base_link">
+            <pose relative_to="base_link">-0.2 0 0 0 0 0</pose> 
+        </frame>
+        <frame name = "bottom" attached_to = "base_link">
+            <pose relative_to="base_link">0 0 -0.2 0 0 0</pose> 
+        </frame>
+        <frame name = "top" attached_to = "base_link">
+            <pose relative_to="base_link">0 0 0.2 0 0 0</pose> 
+        </frame>
+    </model>
+</sdf>

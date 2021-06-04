@@ -20,5 +20,5 @@ def solid_sphere(r, m):
     i = (2.0/5.0)*m*r**2
     print(f"ixx: {i}\niyy: {i}\nizz: {i}")
 
-solid_cuboid(0.01, 0.01, 0.01, 0.01)
+solid_cuboid(0.04, 0.04, 0.04, 0.01)
 

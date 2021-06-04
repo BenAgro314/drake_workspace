@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+    <model name = "puck">
+        <link name="base_link">
+            <inertial>
+                <pose>0 0 0 0 0 0</pose>
+                <mass>0.17</mass>
+                <inertia>
+                    <ixx>0.000708</ixx>
+                    <ixy>0</ixy>
+                    <ixz>0</ixz>
+                    <iyy>0.000708</iyy>
+                    <iyz>0</iyz>
+                    <izz>0.00123</izz>
+                </inertia>
+            </inertial>
+            <visual name = "puck_visual">
+                <pose>0 0 0 0 0 0</pose>
+                <geometry>
+                    <cylinder>
+                        <radius>0.0381</radius>
+                        <length>0.0254</length>
+                    </cylinder>
+                </geometry>
+            </visual>
+            <collision name = "puck_collision">
+                <pose>0 0 0 0 0 0</pose>
+                <geometry>
+                    <cylinder>
+                        <radius>0.0381</radius>
+                        <length>0.0254</length>
+                    </cylinder>
+                </geometry>
+            </collision>
+        </link>
+        <frame name = "bottom" attached_to = "base_link">
+            <pose relative_to="base_link">0 0 -0.0127 0 0 0</pose> 
+        </frame>
+        <frame name = "top" attached_to = "base_link">
+            <pose relative_to="base_link">0 0 0.0127 0 0 0</pose> 
+        </frame>
+    </model>
+</sdf>

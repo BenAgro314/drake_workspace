@@ -78,8 +78,8 @@ def create_welded_station(station, station_context, omni = False,
 
     welded_body_infos = []
 
-    for path, info in list(station.body_info.items()):
-        model_name, body_index = info
+    for item in station.body_info:
+        path, model_name, body_index = item
         body = plant.get_body(body_index)
         X_WB = body.EvalPoseInWorld(plant_context)
         welded_model = parser.AddModelFromFile(path, model_name)
