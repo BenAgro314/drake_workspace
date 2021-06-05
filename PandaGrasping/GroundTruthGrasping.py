@@ -127,7 +127,7 @@ def is_graspable(shape_info):
     return True
 
 def grasp_pose(body_info, station, station_context, 
-        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
+        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]), initial_guess = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
     """
     Returns the best generalized coordinates, q (np.array), for the panda
     in the PandaStation station to grasp the shape in shape_info
@@ -142,18 +142,19 @@ def grasp_pose(body_info, station, station_context,
         if not is_graspable(shape_info):
             continue 
         if shape_info.type == Cylinder:
-            q, cost = cylinder_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal)
+            q, cost = cylinder_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal, initial_guess = initial_guess)
         if shape_info.type == Box:
-            q, cost = box_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal)
+            q, cost = box_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal, initial_guess = initial_guess)
         if shape_info.type == Sphere:
-            q, cost = sphere_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal)
+            q, cost = sphere_grasp_pose(shape_info, station, station_context, q_nominal = q_nominal, initial_guess = initial_guess)
         qs.append(q)
         costs.append(cost)
     indices = np.argsort(costs)
     return qs[indices[0]], costs[indices[0]]
 
 def sphere_grasp_pose(shape_info, station, station_context,
-        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
+        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]),
+        initial_guess = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
     """
     Returns the best generalized coordinates, q (np.array), for the panda
     in the PandaStation station to grasp the sphere in shape_info
@@ -201,7 +202,7 @@ def sphere_grasp_pose(shape_info, station, station_context,
     if q_nominal is not None:
         prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
                 q_nominal, q)
-        prog.SetInitialGuess(q, q_nominal)
+        prog.SetInitialGuess(q, initial_guess)
     result = Solve(prog)
     cost = result.get_optimal_cost()
 
@@ -212,7 +213,8 @@ def sphere_grasp_pose(shape_info, station, station_context,
 
 
 def cylinder_grasp_pose(shape_info, station, station_context, 
-        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
+        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]),
+        initial_guess = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
     """
     Returns the best generalized coordinates, q (np.array), for the panda
     in the PandaStation station to grasp the cylinder in shape_info
@@ -275,7 +277,7 @@ def cylinder_grasp_pose(shape_info, station, station_context,
         if q_nominal is not None:
             prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
                     q_nominal, q)
-            prog.SetInitialGuess(q, q_nominal)
+            prog.SetInitialGuess(q, initial_guess)
         result = Solve(prog)
         cost = result.get_optimal_cost()
 
@@ -322,7 +324,7 @@ def cylinder_grasp_pose(shape_info, station, station_context,
             if q_nominal is not None:
                 prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
                         q_nominal, q)
-                prog.SetInitialGuess(q, q_nominal)
+                prog.SetInitialGuess(q, initial_guess)
             result = Solve(prog)
             cost = result.get_optimal_cost()
 
@@ -357,7 +359,8 @@ def AddDeviationFromCylinderMiddleCost(prog, q, plant, plant_context, G, weight 
     prog.AddCost(cost, q) 
 
 def box_grasp_pose(shape_info, station, station_context,
-        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
+        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]),
+        initial_guess = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
     """
     Returns the best generalized coordinates, q (np.array), for the panda
     in the PandaStation station to grasp the box in shape_info
@@ -465,7 +468,7 @@ def box_grasp_pose(shape_info, station, station_context,
             if q_nominal is not None:
                 prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
                         q_nominal, q)
-                prog.SetInitialGuess(q, q_nominal)
+                prog.SetInitialGuess(q, initial_guess)
             result = Solve(prog)
             cost = result.get_optimal_cost()
 
