@@ -176,16 +176,18 @@ def sphere_grasp_pose(shape_info, station, station_context,
     hand = station.GetHand()
     hand_frame = plant.GetFrameByName("panda_hand", hand)
 
-    cylinder = shape_info.shape
+    sphere = shape_info.shape
     G = shape_info.frame
     X_WG = G.CalcPoseInWorld(plant_context)
 
-    p_tol = 10e-3
-    theta_tol = 0.01
+    margin = 0.08 - sphere.radius()
+    finger_width = 0.02
+    p_tol = min([sphere.radius()/np.sqrt(3), margin/(2*np.sqrt(3)), finger_width/(2*np.sqrt(3))])
+    theta_tol = 0.01*np.pi
     finger_width = 0.020
 
     ik = InverseKinematics(plant, plant_context)
-    ik.AddMinimumDistanceConstraint(0, 0.1)
+    ik.AddMinimumDistanceConstraint(0.001, 0.1)
     ik.AddPositionConstraint(
             hand_frame,
             [0, 0, 0.1],
@@ -240,15 +242,17 @@ def cylinder_grasp_pose(shape_info, station, station_context,
     costs = []
     qs = []
 
-    p_tol = 10e-3
-    theta_tol = 0.01
+    p_tol = 0.01
+    theta_tol = 0.01*np.pi
     finger_width = 0.020
 
     if cylinder.radius() < 0.04:
         lower_z_bound = min(-p_tol, -cylinder.length()/2 + finger_width/2) 
         upper_z_bound = max(p_tol, cylinder.length()/2 - finger_width/2) 
+        margin = 0.08 - cylinder.radius()*2
+        p_tol = min(cylinder.radius()/np.sqrt(2), margin/(2*np.sqrt(2)))
         ik = InverseKinematics(plant, plant_context)
-        ik.AddMinimumDistanceConstraint(0, 0.1)
+        ik.AddMinimumDistanceConstraint(0.001, 0.1)
         ik.AddPositionConstraint(
                 hand_frame,
                 [0, 0, 0.1], 
@@ -289,7 +293,7 @@ def cylinder_grasp_pose(shape_info, station, station_context,
             lower_xy_bound = min(-radius + finger_width/2, -p_tol)
             upper_xy_bound = max(radius - finger_width/2, p_tol)
             ik = InverseKinematics(plant, plant_context)
-            ik.AddMinimumDistanceConstraint(0, 0.1)
+            ik.AddMinimumDistanceConstraint(0.001, 0.1)
             ik.AddPositionConstraint(
                     hand_frame,
                     [0, 0.04*flip, 0.1], 
@@ -410,7 +414,7 @@ def box_grasp_pose(shape_info, station, station_context,
         for a in axes:
             #for axis in axes:
             ik = InverseKinematics(plant, plant_context)
-            ik.AddMinimumDistanceConstraint(0, 0.1)
+            ik.AddMinimumDistanceConstraint(0.001, 0.1)
             dim = None
             if a == 0: #x
                 dim = box.width()

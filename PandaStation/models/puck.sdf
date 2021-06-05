@@ -1,43 +1,88 @@
-<?xml version="1.0"?>
+<?xml version="1.0" encoding="utf-8"?>
 <sdf version="1.7">
     <model name = "puck">
         <link name="base_link">
             <inertial>
                 <pose>0 0 0 0 0 0</pose>
-                <mass>0.17</mass>
+                <mass>0.1</mass>
                 <inertia>
-                    <ixx>0.000708</ixx>
-                    <ixy>0</ixy>
-                    <ixz>0</ixz>
-                    <iyy>0.000708</iyy>
-                    <iyz>0</iyz>
-                    <izz>0.00123</izz>
+                    <ixx>3.0e-05</ixx>
+                    <ixy>0.0</ixy>
+                    <ixz>0.0</ixz>
+                    <iyy>3.0e-05</iyy>
+                    <iyz>0.0</iyz>
+                    <izz>4.5e-05</izz>
                 </inertia>
             </inertial>
-            <visual name = "puck_visual">
+            <visual name = "visual">
                 <pose>0 0 0 0 0 0</pose>
                 <geometry>
                     <cylinder>
-                        <radius>0.0381</radius>
-                        <length>0.0254</length>
+                        <radius>0.03</radius>
+                        <length>0.03</length>
                     </cylinder>
                 </geometry>
             </visual>
-            <collision name = "puck_collision">
+            <collision name = "collision">
                 <pose>0 0 0 0 0 0</pose>
                 <geometry>
                     <cylinder>
-                        <radius>0.0381</radius>
-                        <length>0.0254</length>
+                        <radius>0.03</radius>
+                        <length>0.03</length>
                     </cylinder>
                 </geometry>
+                <surface>
+                    <friction>
+                        <ode>
+                            <mu>1</mu>
+                            <mu2>1</mu2>
+                            <fdir1>0 0 0</fdir1>
+                            <slip1>0</slip1>
+                            <slip2>0</slip2>
+                        </ode>
+                        <torsional>
+                            <coefficient>1</coefficient>
+                            <patch_radius>0</patch_radius>
+                            <surface_radius>0</surface_radius>
+                            <use_patch_radius>1</use_patch_radius>
+                            <ode>
+                                <slip>0</slip>
+                            </ode>
+                        </torsional>
+                    </friction>
+                    <bounce>
+                        <restitution_coefficient>0</restitution_coefficient>
+                        <threshold>1e+06</threshold>
+                    </bounce>
+                    <contact>
+                        <collide_without_contact>0</collide_without_contact>
+                        <collide_without_contact_bitmask>1</collide_without_contact_bitmask>
+                        <collide_bitmask>1</collide_bitmask>
+                        <ode>
+                            <soft_cfm>0</soft_cfm>
+                            <soft_erp>0.2</soft_erp>
+                            <kp>1e+13</kp>
+                            <kd>1</kd>
+                            <max_vel>0.01</max_vel>
+                            <min_depth>0</min_depth>
+                        </ode>
+                        <bullet>
+                            <split_impulse>1</split_impulse>
+                            <split_impulse_penetration_threshold>-0.01</split_impulse_penetration_threshold>
+                            <soft_cfm>0</soft_cfm>
+                            <soft_erp>0.2</soft_erp>
+                            <kp>1e+13</kp>
+                            <kd>1</kd>
+                            </bullet>
+                    </contact>
+                </surface>
             </collision>
         </link>
-        <frame name = "bottom" attached_to = "base_link">
-            <pose relative_to="base_link">0 0 -0.0127 0 0 0</pose> 
+        <!--frame name = "bottom" attached_to = "base_link">
+            <pose relative_to="base_link">0 0 -0.015 0 0</pose> 
         </frame>
         <frame name = "top" attached_to = "base_link">
-            <pose relative_to="base_link">0 0 0.0127 0 0 0</pose> 
-        </frame>
+            <pose relative_to="base_link">0 0 0.015 0 0 0</pose> 
+        </frame-->
     </model>
 </sdf>

@@ -161,10 +161,10 @@ def AddPandaHand(plant, panda_model_instance = None, roll = 0, welded = False):
 
     if welded:
     #TODO(ben): fix this so it works in general
-        gripper = parser.AddModelFromFile(FindResource("models/welded_panda_hand.urdf"))
+        gripper = parser.AddModelFromFile(FindResource("models/welded_panda_hand.sdf"))
     else:
         gripper = parser.AddModelFromFile(
-                FindResource("models/panda_hand_fixed_collisions.urdf"))
+                FindResource("models/panda_hand.sdf"))
         #gripper = parser.AddModelFromFile(pydrake.common.FindResourceOrThrow("drake/manipulation/models/franka_description/urdf/hand.urdf"))
 
     if panda_model_instance is not None:
