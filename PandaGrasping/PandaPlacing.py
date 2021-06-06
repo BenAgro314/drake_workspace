@@ -74,6 +74,12 @@ def is_safe_to_place(placement_shape_info, station, station_context):
             return True, PlacementSurface(placement_shape_info, z_G, bb_min, bb_max)
         return False, None
 
+def is_placeable(holding_shape_info):
+    shape = holding_shape_info.shape
+    if type(shape) == Sphere:
+        if shape.radius() < 0.001:
+            return False
+    return True
 
 def place_pose(holding_body_info, place_body_info, station, station_context,
         q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]), initial_guess = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
@@ -94,8 +100,8 @@ def place_pose(holding_body_info, place_body_info, station, station_context,
         if not stat:
             continue
         for holding_shape_info in holding_body_info.shape_infos:
-            # TODO: check if placeable
-            if not is_graspable(holding_shape_info):
+            # filter out tiny shapes 
+            if not is_placeable(holding_shape_info): 
                 continue 
             if holding_shape_info.type == Cylinder:
                 q, cost = cylinder_placement_pose(holding_shape_info, 
@@ -123,7 +129,7 @@ def place_pose(holding_body_info, place_body_info, station, station_context,
     indices = np.argsort(costs)
     return qs[indices[0]], costs[indices[0]]
 
-def extract_corners(box, axis, sign):
+def extract_box_corners(box, axis, sign):
     x = np.array([box.width()/2, 0, 0])
     y = np.array([0, box.depth()/2, 0])
     z = np.array([0, 0, box.height()/2])
@@ -139,6 +145,97 @@ def extract_corners(box, axis, sign):
         corners.append(corner)
     return corners
 
+def extract_cylinder_corners(cylinder, sign):
+    dim = cylinder.radius()*np.sqrt(2)
+    x = np.array([dim, 0, 0])
+    y = np.array([0, dim, 0])
+    z = np.array([0, 0, cylinder.length()/2])
+    vecs = [x, y]
+    a = z*sign
+    corners = []
+    for i in range(4):
+        signs = [ (i & 0b1)*2 - 1, ((i>>1) & 0b1)*2 - 1]
+        corner = a
+        for s, v in zip(signs, vecs):
+            corner = corner + s*v
+        corners.append(corner)
+    return corners
+
+
+def cylinder_placement_pose(holding_shape_info,
+                        surface,
+                        station, 
+                        station_context, 
+                        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]), 
+                        initial_guess = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
+
+    # only try to place cylinders on their flat sides
+
+    weights = np.array([0,1])
+    norm = np.linalg.norm(weights)
+    assert norm != 0, "invalid weights"
+    weights = weights/norm
+
+    plant = station.get_multibody_plant()
+    assert (q_nominal is None) or plant.num_positions() == len(q_nominal), "incorret length of q_nominal"
+    plant_context = station.GetSubsystemContext(plant, station_context)
+    H = holding_shape_info.frame
+    cylinder = holding_shape_info.shape
+    P = surface.shape_info.frame
+
+    signs = [-1,1]
+    costs = []
+    qs = []
+
+    theta_tol = np.pi*0.01
+
+    # create conservative bounding box around cylinder
+
+    for sign in signs:
+
+        ik = InverseKinematics(plant, plant_context)
+        ik.AddMinimumDistanceConstraint(0.001, 0.1)
+        # conservative cylinder corners must lie in above placement surface face
+        corners = extract_cylinder_corners(cylinder, sign)
+        for corner in corners:
+            ik.AddPositionConstraint(
+                    H,
+                    corner,
+                    P,
+                    surface.bb_min,
+                    surface.bb_max)
+
+        n = np.array([0, 0, -1])*sign
+        ik.AddAngleBetweenVectorsConstraint(
+                H,
+                n,
+                plant.world_frame(),
+                surface.z,
+                0,
+                theta_tol)
+        prog = ik.prog()
+        q = ik.q()
+        AddDeviationFromVerticalCost(prog, q, 
+                plant, plant_context, weight = weights[1])
+        if q_nominal is not None:
+            prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
+                    q_nominal, q)
+
+        if initial_guess is not None:
+            prog.SetInitialGuess(q, initial_guess)
+
+        result = Solve(prog)
+        cost = result.get_optimal_cost()
+
+        if not result.is_success():
+            cost = np.inf
+
+        costs.append(cost)
+        qs.append(result.GetSolution(q))
+            
+    indices = np.argsort(costs)
+    return qs[indices[0]], min(costs)# return lowest cost
+
 
 def box_placement_pose(holding_shape_info,
                         surface,
@@ -146,16 +243,10 @@ def box_placement_pose(holding_shape_info,
                         station_context, 
                         q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]), 
                         initial_guess = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
-    """
-    Returns the best generalized coordinates, q (np.array), for the panda
-    in the PandaStation station to place the shape that it is holdign in 
-    holding_shape_info onto placement_shape_info, if 
-    """
+
     # weighting parameters in order:
     # deviation_from_nominal_weight
     # deviation_from_vertical_weight 
-    # deviation_from_box_center_weight 
-    # TODO(ben): make something clever that depends on object size
     weights = np.array([0,1])
     norm = np.linalg.norm(weights)
     assert norm != 0, "invalid weights"
@@ -179,10 +270,10 @@ def box_placement_pose(holding_shape_info,
     for sign in signs:
         for a in axes:
             ik = InverseKinematics(plant, plant_context)
-            ik.AddMinimumDistanceConstraint(0, 0.1)
+            ik.AddMinimumDistanceConstraint(0.001, 0.1)
             dim = box_dim_from_index(a, box)
             #corners of face must lie in bounding box
-            corners = extract_corners(box, a, sign)
+            corners = extract_box_corners(box, a, sign)
             for corner in corners:
                 ik.AddPositionConstraint(
                         H,

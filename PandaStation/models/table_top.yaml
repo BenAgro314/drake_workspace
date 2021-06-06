@@ -20,7 +20,7 @@ directives:
         X_PF:
             base_frame: world
             rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
-            translation: [-0.75, 0, 0.1]
+            translation: [-0.7, 0, 0]
 
     - add_model:
         name: square_target
@@ -35,7 +35,7 @@ directives:
         X_PF:
             base_frame: world
             rotation: !Rpy { deg: [0.0, 0.0, 0.0]}
-            translation: [0, 0.75, 0.25]
+            translation: [0, 0.7, 0]
 
     - add_model:
         name: round_target
