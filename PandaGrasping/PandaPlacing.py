@@ -32,7 +32,7 @@ def is_safe_to_place(placement_shape_info, station, station_context):
     theta_tol = np.pi*0.1
 
     if type(shape) == Sphere:
-        return False, None
+        return False, None # don't try to place things on a sphere
     if type(shape) == Cylinder:
         # the z axis of the cylinder needs to be aligned with the world z axis
         z_W = np.array([0, 0, 1])
@@ -102,7 +102,12 @@ def place_pose(holding_body_info, place_body_info, station, station_context,
         for holding_shape_info in holding_body_info.shape_infos:
             # filter out tiny shapes 
             if not is_placeable(holding_shape_info): 
-                continue 
+                q, cost = sphere_placement_pose(holding_shape_info, 
+                        surface,
+                        station, 
+                        station_context, 
+                        q_nominal = q_nominal, 
+                        initial_guess = initial_guess)
             if holding_shape_info.type == Cylinder:
                 q, cost = cylinder_placement_pose(holding_shape_info, 
                         surface,
@@ -161,6 +166,63 @@ def extract_cylinder_corners(cylinder, sign):
         corners.append(corner)
     return corners
 
+def sphere_placement_pose(holding_shape_info,
+                        surface,
+                        station, 
+                        station_context, 
+                        q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]), 
+                        initial_guess = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
+
+    # only try to place cylinders on their flat sides
+
+    weights = np.array([0,1])
+    norm = np.linalg.norm(weights)
+    assert norm != 0, "invalid weights"
+    weights = weights/norm
+
+    plant = station.get_multibody_plant()
+    assert (q_nominal is None) or plant.num_positions() == len(q_nominal), "incorret length of q_nominal"
+    plant_context = station.GetSubsystemContext(plant, station_context)
+    H = holding_shape_info.frame
+    sphere = holding_shape_info.shape
+    P = surface.shape_info.frame
+
+    a = None
+    for i in range(len(surface.bb_min)):
+        if np.isclose(surface.bb_min[i], surface.bb_max[i]*-1):
+            surface.bb_min[i] = surface.bb_min[i] + sphere.radius() 
+            surface.bb_max[i] = surface.bb_max[i] - sphere.radius() 
+        else:
+            sign = np.sign(surface.bb_max[i])
+            surface.bb_max[i] = surface.bb_max[i] + sign * sphere.radius()
+            surface.bb_min[i] = surface.bb_min[i] + sign * sphere.radius()
+    
+    ik = InverseKinematics(plant, plant_context)
+    ik.AddMinimumDistanceConstraint(0.001, 0.1)
+    ik.AddPositionConstraint(
+            H,
+            np.zeros(3),
+            P,
+            surface.bb_min,
+            surface.bb_max)
+
+    prog = ik.prog()
+    q = ik.q()
+    AddDeviationFromVerticalCost(prog, q, 
+            plant, plant_context, weight = weights[1])
+    if q_nominal is not None:
+        prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
+                q_nominal, q)
+    if initial_guess is not None:
+        prog.SetInitialGuess(q, initial_guess)
+
+    result = Solve(prog)
+    cost = result.get_optimal_cost()
+
+    if not result.is_success():
+        cost = np.inf
+
+    return result.GetSolution(q), cost
 
 def cylinder_placement_pose(holding_shape_info,
                         surface,
