@@ -71,7 +71,6 @@ def is_safe_to_place(placement_shape_info, station, station_context):
                 bb_max[a] = bb_max[a] + drop_height
             else:
                 bb_min[a] = bb_min[a] - drop_height
-            print(bb_min, bb_max)
             return True, PlacementSurface(placement_shape_info, z_G, bb_min, bb_max)
         return False, None
 
@@ -95,6 +94,7 @@ def place_pose(holding_body_info, place_body_info, station, station_context,
         if not stat:
             continue
         for holding_shape_info in holding_body_info.shape_infos:
+            # TODO: check if placeable
             if not is_graspable(holding_shape_info):
                 continue 
             if holding_shape_info.type == Cylinder:
@@ -121,7 +121,7 @@ def place_pose(holding_body_info, place_body_info, station, station_context,
             qs.append(q)
             costs.append(cost)
     indices = np.argsort(costs)
-    return None, None #qs[indices[0]], costs[indices[0]]
+    return qs[indices[0]], costs[indices[0]]
 
 def extract_corners(box, axis, sign):
     x = np.array([box.width()/2, 0, 0])
@@ -131,19 +131,13 @@ def extract_corners(box, axis, sign):
     a = vecs.pop(axis)
     a = a*sign
     corners = []
-    for i in range(3):
-        sign1 = i & 1
-        sign2 = i & 2
-        sign1 = sign1*2 - 1
-        sign2 = sign2*2 - 1
-        corner = np.zeros(3)
-        corner = corner + a
-        for v in vecs:
-            corner = corner - 
-            # NOT FINISHED
-            
-
-
+    for i in range(4):
+        signs = [ (i & 0b1)*2 - 1, ((i>>1) & 0b1)*2 - 1]
+        corner = a
+        for s, v in zip(signs, vecs):
+            corner = corner + s*v
+        corners.append(corner)
+    return corners
 
 
 def box_placement_pose(holding_shape_info,
@@ -162,12 +156,10 @@ def box_placement_pose(holding_shape_info,
     # deviation_from_vertical_weight 
     # deviation_from_box_center_weight 
     # TODO(ben): make something clever that depends on object size
-    weights = np.array([0,1,100])
+    weights = np.array([0,1])
     norm = np.linalg.norm(weights)
     assert norm != 0, "invalid weights"
     weights = weights/norm
-
-
 
     plant = station.get_multibody_plant()
     assert (q_nominal is None) or plant.num_positions() == len(q_nominal), "incorret length of q_nominal"
@@ -181,11 +173,55 @@ def box_placement_pose(holding_shape_info,
     costs = []
     qs = []
 
+    theta_tol = np.pi*0.01
+
+    
     for sign in signs:
         for a in axes:
             ik = InverseKinematics(plant, plant_context)
             ik.AddMinimumDistanceConstraint(0, 0.1)
             dim = box_dim_from_index(a, box)
             #corners of face must lie in bounding box
+            corners = extract_corners(box, a, sign)
+            for corner in corners:
+                ik.AddPositionConstraint(
+                        H,
+                        corner,
+                        P,
+                        surface.bb_min,
+                        surface.bb_max)
+
+            n = np.zeros(3)
+            n[a] = -sign
+            ik.AddAngleBetweenVectorsConstraint(
+                    H,
+                    n,
+                    plant.world_frame(),
+                    surface.z,
+                    0,
+                    theta_tol)
+            prog = ik.prog()
+            q = ik.q()
+            AddDeviationFromVerticalCost(prog, q, 
+                    plant, plant_context, weight = weights[1])
+            if q_nominal is not None:
+                prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
+                        q_nominal, q)
+
+            if initial_guess is not None:
+                prog.SetInitialGuess(q, initial_guess)
+
+            result = Solve(prog)
+            cost = result.get_optimal_cost()
+
+            if not result.is_success():
+                cost = np.inf
+
+            costs.append(cost)
+            qs.append(result.GetSolution(q))
+            #TODO(deviation from placement surface center)
+            
+    indices = np.argsort(costs)
+    return qs[indices[0]], min(costs)# return lowest cost
 
 

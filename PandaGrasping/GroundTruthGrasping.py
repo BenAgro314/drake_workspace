@@ -91,7 +91,6 @@ def create_welded_station(station, station_context, omni = False,
             welded_plant.WeldFrames(welded_plant.GetFrameByName("panda_hand"), 
                     welded_plant.GetFrameByName(body.name(), welded_model),
                     X_HB)
-            continue
         else:
             welded_plant.WeldFrames(welded_plant.world_frame(), 
                     welded_plant.GetFrameByName(body.name(), welded_model),
@@ -104,8 +103,8 @@ def create_welded_station(station, station_context, omni = False,
             shape = inspector.GetShape(geom_id)
             X_BG = inspector.GetPoseInFrame(geom_id)
             frame_name = "frame_" + model_name+ "_" + welded_body.name() + "_" + str(i)
-            frame = welded_plant.AddFrame(FixedOffsetFrame(frame_name, welded_body.body_frame(),
-                                        X_BG))
+            frame = welded_plant.AddFrame(
+                    FixedOffsetFrame(frame_name, welded_body.body_frame(),X_BG))
             welded_body_info.add_shape_info(ShapeInfo(shape, frame))
         welded_body_infos[model_name] = welded_body_info
 
@@ -113,11 +112,15 @@ def create_welded_station(station, station_context, omni = False,
         welded_station.Finalize()
         return welded_station, welded_body_infos
 
+    test = None
+    
     for model_name in placement_model_names:
         model = plant.GetModelInstanceByName(model_name)
-        body_indices = plant.GetBodyIndices(model)
+        indices = plant.GetBodyIndices(model)
         assert len(indices) == 1
-        body = plant.get_body(body_indices[0])
+        body = plant.get_body(indices[0])
+        X_WB = body.EvalPoseInWorld(plant_context)
+        welded_model = plant.GetModelInstanceByName(model_name)
         indices = welded_plant.GetBodyIndices(welded_model)
         welded_body_info = BodyInfo(indices[0])
         welded_body = welded_plant.get_body(indices[0])
@@ -125,12 +128,14 @@ def create_welded_station(station, station_context, omni = False,
             shape = inspector.GetShape(geom_id)
             X_BG = inspector.GetPoseInFrame(geom_id)
             frame_name = "frame_" + model_name+ "_" + welded_body.name() + "_" + str(i)
-            frame = welded_plant.AddFrame(FixedOffsetFrame(frame_name, 
-                welded_body.body_frame(), X_BG))
+            frame = welded_plant.AddFrame(
+                    FixedOffsetFrame(frame_name, welded_body.body_frame(), X_BG))
+            test = welded_body.body_frame()
             welded_body_info.add_shape_info(ShapeInfo(shape, frame))
         welded_body_infos[model_name] = welded_body_info
 
     welded_station.Finalize()
+
     return welded_station, welded_body_infos
 
 def is_graspable(shape_info):

@@ -20,5 +20,5 @@ def solid_sphere(r, m):
     i = (2.0/5.0)*m*r**2
     print(f"ixx: {i}\niyy: {i}\nizz: {i}")
 
-solid_cylinder(0.03, 0.03, 0.1)
+solid_cylinder(0.1, 0.05, 1)
 
