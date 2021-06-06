@@ -33,8 +33,10 @@ class ShapeInfo:
             s = "sphere"
         return s + " " + str(self.frame)
 
+
+
 def create_welded_station(station, station_context, omni = False,
-        body_index_to_weld_to_hand = None):
+        body_index_to_weld_to_hand = None, placement_model_names = None):
     """
     Given a PandaStation, return a version with everything welded in place 
     except for the panda arm (fingers are welded as well)
@@ -76,7 +78,7 @@ def create_welded_station(station, station_context, omni = False,
     # add and weld all the models
     # TODO(ben): currently this only supports models with one body
 
-    welded_body_infos = []
+    welded_body_infos = {}
 
     for item in station.body_info:
         path, model_name, body_index = item
@@ -105,10 +107,30 @@ def create_welded_station(station, station_context, omni = False,
             frame = welded_plant.AddFrame(FixedOffsetFrame(frame_name, welded_body.body_frame(),
                                         X_BG))
             welded_body_info.add_shape_info(ShapeInfo(shape, frame))
-        welded_body_infos.append(welded_body_info)
-    
-    welded_station.Finalize()
+        welded_body_infos[model_name] = welded_body_info
 
+    if placement_model_names is None:
+        welded_station.Finalize()
+        return welded_station, welded_body_infos
+
+    for model_name in placement_model_names:
+        model = plant.GetModelInstanceByName(model_name)
+        body_indices = plant.GetBodyIndices(model)
+        assert len(indices) == 1
+        body = plant.get_body(body_indices[0])
+        indices = welded_plant.GetBodyIndices(welded_model)
+        welded_body_info = BodyInfo(indices[0])
+        welded_body = welded_plant.get_body(indices[0])
+        for i, geom_id in enumerate(plant.GetCollisionGeometriesForBody(body)):
+            shape = inspector.GetShape(geom_id)
+            X_BG = inspector.GetPoseInFrame(geom_id)
+            frame_name = "frame_" + model_name+ "_" + welded_body.name() + "_" + str(i)
+            frame = welded_plant.AddFrame(FixedOffsetFrame(frame_name, 
+                welded_body.body_frame(), X_BG))
+            welded_body_info.add_shape_info(ShapeInfo(shape, frame))
+        welded_body_infos[model_name] = welded_body_info
+
+    welded_station.Finalize()
     return welded_station, welded_body_infos
 
 def is_graspable(shape_info):
@@ -131,10 +153,6 @@ def grasp_pose(body_info, station, station_context,
     """
     Returns the best generalized coordinates, q (np.array), for the panda
     in the PandaStation station to grasp the shape in shape_info
-
-    Args:
-        shape_info: a shape info instance
-        station: a PandaStation system
     """
     qs = []
     costs = []
@@ -358,6 +376,15 @@ def AddDeviationFromCylinderMiddleCost(prog, q, plant, plant_context, G, weight 
     cost = lambda q: weight*deviation_from_cylinder_middle_cost(q)
     prog.AddCost(cost, q) 
 
+def box_dim_from_index(index, box):
+    if index == 0: #x
+        return box.width()
+    if index == 1: #y
+        return box.depth()
+    if index == 2: #z
+        return box.height()
+    raise Exception("Invalid box index")
+
 def box_grasp_pose(shape_info, station, station_context,
         q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]),
         initial_guess = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
@@ -418,20 +445,14 @@ def box_grasp_pose(shape_info, station, station_context,
             #for axis in axes:
             ik = InverseKinematics(plant, plant_context)
             ik.AddMinimumDistanceConstraint(0.001, 0.1)
-            dim = None
-            if a == 0: #x
-                dim = box.width()
-            if a == 1: #y
-                dim = box.depth()
-            if a == 2: #z
-                dim = box.height()
+            dim = box_dim_from_index(a, box)
             margin = 0.08 - dim
             eps = 1e-3
             if (margin < 0.006 + eps):
                 continue 
             unit_vec = np.zeros(3)
             unit_vec[a] += 1
-            p_GQu_G = [box.width()/2 + margin/2, box.depth()/2, box.height()/2]
+            p_GQu_G = [box.width()/2, box.depth()/2, box.height()/2]
             p_GQu_G[a] += margin
             p_GQl_G = [-box.width()/2, - box.depth()/2, - box.height()/2]
             p_GQl_G[a]*= -1.0
