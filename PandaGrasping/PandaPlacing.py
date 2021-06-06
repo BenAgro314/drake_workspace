@@ -231,7 +231,7 @@ def cylinder_placement_pose(holding_shape_info,
                         q_nominal = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.]), 
                         initial_guess = np.array([ 0., 0.55, 0., -1.45, 0., 1.58, 0.])):
 
-    # only try to place cylinders on their flat sides
+    # first try to place cylinders on their flat sides
 
     weights = np.array([0,1])
     norm = np.linalg.norm(weights)
@@ -296,8 +296,53 @@ def cylinder_placement_pose(holding_shape_info,
         qs.append(result.GetSolution(q))
             
     indices = np.argsort(costs)
-    return qs[indices[0]], min(costs)# return lowest cost
+    best_q = qs[indices[0]] 
+    lowest_cost = min(costs)
+    if np.isfinite(lowest_cost):
+        return best_q, lowest_cost
 
+    
+    # try and place the cylinder lengthwise
+
+    a = None
+    for i in range(len(surface.bb_min)):
+        # adjust height of bounding box
+        if not np.isclose(surface.bb_min[i], surface.bb_max[i]*-1):
+            sign = np.sign(surface.bb_max[i])
+            surface.bb_max[i] = surface.bb_max[i] + sign * cylinder.radius()
+            surface.bb_min[i] = surface.bb_min[i] + sign * cylinder.radius()
+    
+    ik = InverseKinematics(plant, plant_context)
+    ik.AddMinimumDistanceConstraint(0.001, 0.1)
+    ik.AddPositionConstraint(
+            H,
+            np.array([0, 0, cylinder.length()/2]),
+            P,
+            surface.bb_min,
+            surface.bb_max)
+    ik.AddPositionConstraint(
+            H,
+            np.array([0, 0, -cylinder.length()/2]),
+            P,
+            surface.bb_min,
+            surface.bb_max)
+    prog = ik.prog()
+    q = ik.q()
+    AddDeviationFromVerticalCost(prog, q, 
+            plant, plant_context, weight = weights[1])
+    if q_nominal is not None:
+        prog.AddQuadraticErrorCost(weights[0]*np.identity(len(q)), 
+                q_nominal, q)
+    if initial_guess is not None:
+        prog.SetInitialGuess(q, initial_guess)
+
+    result = Solve(prog)
+    cost = result.get_optimal_cost()
+
+    if not result.is_success():
+        cost = np.inf
+
+    return result.GetSolution(q), cost
 
 def box_placement_pose(holding_shape_info,
                         surface,
