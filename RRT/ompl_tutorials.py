@@ -1,62 +1,51 @@
+import ompl
 from ompl import base as ob
 from ompl import geometric as og
 
 
 param = 0.6
 
-class TestClass:
+class CustomStateSpace(ob.RealVectorStateSpace):
 
-    def __init__(self, param1):
-        self.param1 = param1
+    def __init__(self, nq):
+        super().__init__(nq)
 
-    def isStateValid(self, state):
-        #print(state.rotation().x)
-        return True
+    def distance(self, state1, state2):
+        return 1
+
 
 def isStateValid(state):
-    global param
-    return state[0] < param
+    return True
 
 def plan():
 
-    test = TestClass(0.6)
-
-
     dim = 2
-    space = ob.SE3StateSpace()
-    bounds = ob.RealVectorBounds(3)
+    space = ob.RealVectorStateSpace(dim)
+    bounds = ob.RealVectorBounds(dim)
     bounds.setLow(-10)
     bounds.setHigh(10)
     space.setBounds(bounds)
 
     ss = og.SimpleSetup(space)
-    ss.setStateValidityChecker(ob.StateValidityCheckerFn(test.isStateValid))
+    ss.setStateValidityChecker(ob.StateValidityCheckerFn(isStateValid))
     state = ob.State(space)
+    n = ompl.datastructures.NearestNeighbours()
 
     start = ob.State(space)
-    start[0] = 0.5
-    start[1] = 4.56e-18
-    start[2] = 0.5
-    start[3] = 8.7e-18
-    start[4] = 1 
-    start[5] = 6.16e-17
-    start[6] = 6.126e-17
+    start[0] = 0
+    start[1] = 0
     print(start)
 
     goal = ob.State(space)
-    goal[0] = 0.6
-    goal[1] = 3.18e-18
-    goal[2] = 0.2694
-    goal[3] = -6.12e-17
-    goal[4] = 1
-    goal[5] = -6.12e-17
-    goal[6] = 1.61e-15
+    goal[0] = 1
+    goal[1] = 1
     print(goal)
+    print(f"distance: {space.distance(start.get(), goal.get())}")
 
     ss.setStartAndGoalStates(start, goal)
-    print(ss)
 
     solved = ss.solve()
+    print(ss.getPlanner())
 
     if (solved):
         ss.simplifySolution()

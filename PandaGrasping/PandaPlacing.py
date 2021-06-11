@@ -44,9 +44,10 @@ def is_safe_to_place(placement_shape_info, station, station_context):
             return False, None
         else:
             z_G = z_G * np.sign(dot) # get upwards pointing vector
-            bb_min = np.array([-shape.radius(), -shape.radius(), shape.length()/2])
+            r_prime = shape.radius()/np.sqrt(2)
+            bb_min = np.array([-r_prime, -r_prime, shape.length()/2])
             bb_min[2] = bb_min[2]*np.sign(dot)
-            bb_max = np.array([shape.radius(), shape.radius(), shape.length()/2])
+            bb_max = np.array([r_prime, r_prime, shape.length()/2])
             bb_max[2] = bb_min[2]*np.sign(dot)
             if np.sign(dot) > 0:
                 bb_max[2] = bb_max[2] + drop_height

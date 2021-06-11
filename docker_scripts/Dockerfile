@@ -79,7 +79,7 @@ RUN pip install black
 RUN pip install open3d==0.10.0.0
 #RUN git clone https://github.com/Khodeir/furniture.git ~/furniture
 
-RUN curl -sSL http://get.gazebosim.org | sh
+#RUN curl -sSL http://get.gazebosim.org | sh
 
 RUN echo "source /python_venvs/drake_env/bin/activate" >> ~/.bashrc
 RUN echo "export  $USER=$user" >> ~/.bashrc
